@@ -6,6 +6,16 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+### Planned
+- Push notifications on phones (needs an Expo development build).
+- Holiday calendar for analytics, and grades or courses for students.
+- Staff in the roll call and a staff CSV export.
+- Independent security and privacy review before any use with real data.
+
+## [0.2.0] - 2026-11-13
+
+Redesign, campus maps and attendance per person.
+
 ### Changed
 - New visual identity for the dashboard and the app, from Popayán's white colonial
   facades: lime-wash background, deep blue-green ink, chalkboard green for presence and
@@ -30,12 +40,6 @@ All notable changes are listed here. The format follows
   map is a small self-contained page in a WebView; it loads no external script.
 - `GET /api/v1/attendance/roster`: every active student with the current state and the
   last event, for school admins and teachers.
-
-### Planned after the MVP
-- Push notifications on phones (needs an Expo development build).
-- Holiday calendar for analytics, and a map editor for geofences.
-- Spanish interface for the dashboard (the mobile app is already in Spanish).
-- Independent security and privacy review before any use with real data.
 
 ## [0.1.0] - 2026-11-13
 
