@@ -137,7 +137,7 @@ async def run_phase(
         index: int, headers: dict[str, str], event_type: str, campus: uuid.UUID, key: str
     ) -> None:
         if rate is not None:
-            await asyncio.sleep(max(0.0, started + index / rate - time.perf_counter()))
+            await asyncio.sleep(max(0.0, phase_start + index / rate - time.perf_counter()))
         async with gate:
             body = event_body(event_type, campus, key)
             started = time.perf_counter()
@@ -150,9 +150,9 @@ async def run_phase(
                 status = 0
             phase.record(status, (time.perf_counter() - started) * 1000)
 
-    started = time.perf_counter()
+    phase_start = time.perf_counter()
     await asyncio.gather(*(one(i, *request) for i, request in enumerate(requests)))
-    phase.seconds = time.perf_counter() - started
+    phase.seconds = time.perf_counter() - phase_start
     return phase
 
 
