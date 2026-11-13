@@ -1,12 +1,21 @@
 "use client";
 
-import { type FormEvent, useMemo, useState } from "react";
+import { Fragment, type FormEvent, useMemo, useState } from "react";
 
+import { CampusMap, type Draft, type MapPoint } from "@/components/CampusMap";
 import { Icon } from "@/components/Icon";
 import { AdminOnly, Message, PageHead, StatusBadge, useSession } from "@/components/Shell";
 import { api, newIdempotencyKey, useApi } from "@/lib/client";
-import { EVENT_LABELS, SOURCE_LABELS, formatDateTime, initials, reasonLabel } from "@/lib/format";
-import type { AttendanceEvent, Campus, Student, ValidationStatus } from "@/lib/types";
+import {
+  EVENT_LABELS,
+  SOURCE_LABELS,
+  formatDateTime,
+  initials,
+  reasonLabel,
+  statusLabel,
+  statusTone,
+} from "@/lib/format";
+import type { AttendanceEvent, Campus, Geofence, Student, ValidationStatus } from "@/lib/types";
 
 const FILTERS: { value: ValidationStatus | ""; label: string }[] = [
   { value: "FLAGGED_FOR_REVIEW", label: "Por revisar" },
@@ -14,6 +23,68 @@ const FILTERS: { value: ValidationStatus | ""; label: string }[] = [
   { value: "VALIDATED", label: "Válidos" },
   { value: "REJECTED", label: "Rechazados" },
 ];
+
+const NO_DRAFT: Draft = { polygon: [], circle: { center: null, radius: 0 } };
+
+/** The event on the campus map: where the phone was, how precise it was, and the geofence. */
+function EventMap({ event, who }: { event: AttendanceEvent; who: string }) {
+  const geofences = useApi<Geofence[]>(`geofences?campus_id=${event.campus_id}`);
+  const location = event.location;
+  const probe = useMemo<MapPoint | null>(() => {
+    if (!location) return null;
+    const tone = statusTone(event.validation_status);
+    return {
+      id: event.id,
+      position: [location.latitude, location.longitude],
+      tone: tone === "neutral" ? "warn" : tone,
+      label: `${who}: ${statusLabel(event.validation_status)}`,
+    };
+  }, [event, location, who]);
+  if (!location || !probe) return null;
+
+  const accuracy = location.accuracy_m;
+  const outside = event.geofence_result === "OUTSIDE";
+  return (
+    <div className="event-map">
+      <CampusMap
+        geofences={geofences.data ?? []}
+        mode="view"
+        draft={NO_DRAFT}
+        probe={probe}
+        probeAccuracy={accuracy}
+        height={340}
+      />
+      <div className="event-facts">
+        <h3>{EVENT_LABELS[event.event_type]} de {who}</h3>
+        <dl>
+          <dt>Resultado</dt>
+          <dd><StatusBadge status={event.validation_status} /></dd>
+          <dt>Posición</dt>
+          <dd>
+            {statusLabel(event.geofence_result)} de la geocerca
+            {outside && event.distance_to_geofence_m !== null && `, a ${Math.round(event.distance_to_geofence_m)} m del borde`}
+          </dd>
+          <dt>Precisión del GPS</dt>
+          <dd>{accuracy !== null ? `±${Math.round(accuracy)} m (el círculo de color)` : "Desconocida"}</dd>
+          {event.validation_reasons.length > 0 && (
+            <>
+              <dt>Motivo</dt>
+              <dd>{event.validation_reasons.map(reasonLabel).join(". ")}</dd>
+            </>
+          )}
+          <dt>Coordenadas</dt>
+          <dd className="num small">
+            {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
+          </dd>
+        </dl>
+        <p className="muted small">
+          Si el círculo de precisión toca el borde de la geocerca, el sistema no puede asegurar de qué lado
+          estaba la persona; por eso queda para tu revisión.
+        </p>
+      </div>
+    </div>
+  );
+}
 
 function ReviewButtons({ event, onDone }: { event: AttendanceEvent; onDone: () => void }) {
   const [error, setError] = useState<string | null>(null);
@@ -122,6 +193,9 @@ export default function AttendancePage() {
   const students = useApi<Student[]>(isAdmin ? "students" : null);
   const campuses = useApi<Campus[]>("campuses");
 
+  const [open, setOpen] = useState<string | null>(null);
+  const toggle = (id: string) => setOpen((current) => (current === id ? null : id));
+
   const studentName = useMemo(() => {
     const names = new Map(students.data?.map((s) => [s.id, s.full_name]));
     return (e: AttendanceEvent) => (e.student_id ? (names.get(e.student_id) ?? "Estudiante") : "Funcionario");
@@ -173,7 +247,15 @@ export default function AttendancePage() {
             </thead>
             <tbody>
               {events.data?.map((e) => (
-                <tr key={e.id}>
+                <Fragment key={e.id}>
+                <tr
+                  className={e.location ? "clickable" : undefined}
+                  aria-expanded={e.location ? open === e.id : undefined}
+                  onClick={(click) => {
+                    if (!e.location || (click.target as HTMLElement).closest("button")) return;
+                    toggle(e.id);
+                  }}
+                >
                   <td>
                     <span className="person">
                       <span className="avatar">{initials(studentName(e))}</span>
@@ -189,14 +271,32 @@ export default function AttendancePage() {
                   <td><StatusBadge status={e.validation_status} /></td>
                   <td className="muted small">{e.validation_reasons.map(reasonLabel).join(". ") || "–"}</td>
                   {isAdmin && (
-                    <td className="muted small num">
-                      {e.location
-                        ? `${e.location.latitude.toFixed(5)}, ${e.location.longitude.toFixed(5)} (±${Math.round(e.location.accuracy_m ?? 0)} m)`
-                        : "–"}
+                    <td>
+                      {e.location ? (
+                        <button
+                          type="button"
+                          className="ghost small"
+                          aria-expanded={open === e.id}
+                          onClick={() => toggle(e.id)}
+                        >
+                          <Icon name="pin" size={16} />
+                          {open === e.id ? "Ocultar mapa" : "Ver en el mapa"}
+                        </button>
+                      ) : (
+                        <span className="muted small">Sin ubicación</span>
+                      )}
                     </td>
                   )}
                   {isAdmin && <td className="actions"><ReviewButtons event={e} onDone={events.reload} /></td>}
                 </tr>
+                {open === e.id && (
+                  <tr className="detail">
+                    <td colSpan={isAdmin ? 8 : 6}>
+                      <EventMap event={e} who={studentName(e)} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

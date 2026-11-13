@@ -49,6 +49,20 @@ export interface GuardedStudent {
   full_name: string;
   state: SubjectState["state"];
 }
+export interface Geofence {
+  id: string;
+  name: string;
+  is_active: boolean;
+  area: { type: "Polygon"; coordinates: number[][][] };
+}
+/** The last location read on this phone, kept in memory only to show it on a map. */
+export interface LastFix {
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+  title: string;
+  tone: "ok" | "warn" | "bad" | "info";
+}
 export interface Notification {
   id: string;
   title: string;
@@ -95,6 +109,9 @@ export function useAppData(onSignedOut: () => void) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<EventType | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [geofences, setGeofences] = useState<Geofence[]>([]);
+  const [lastFix, setLastFix] = useState<LastFix | null>(null);
+  const [locating, setLocating] = useState(false);
 
   const handle = useCallback(
     (e: unknown) => {
@@ -178,6 +195,38 @@ export function useAppData(onSignedOut: () => void) {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!campusId) return;
+    let cancelled = false;
+    api
+      .request<Geofence[]>(`geofences?campus_id=${encodeURIComponent(campusId)}`)
+      .then((list) => !cancelled && setGeofences(list))
+      .catch(() => !cancelled && setGeofences([]));
+    return () => {
+      cancelled = true;
+    };
+  }, [campusId]);
+
+  /** Show where the phone is now, without recording anything. */
+  const locateMe = useCallback(async () => {
+    setLocating(true);
+    setError(null);
+    try {
+      const fix = await currentFix();
+      setLastFix({
+        latitude: fix.latitude,
+        longitude: fix.longitude,
+        accuracy: fix.accuracy,
+        title: "Tu ubicación ahora",
+        tone: "info",
+      });
+    } catch (e) {
+      handle(e);
+    } finally {
+      setLocating(false);
+    }
+  }, [handle]);
+
   const record = useCallback(
     async (eventType: EventType) => {
       if (!campusId) return;
@@ -187,6 +236,13 @@ export function useAppData(onSignedOut: () => void) {
       let request: AttendanceEventRequest | null = null;
       try {
         const fix = await currentFix(); // location is read only now, on the user's action
+        const where = {
+          latitude: fix.latitude,
+          longitude: fix.longitude,
+          accuracy: fix.accuracy,
+          title: "Aquí registraste",
+        };
+        setLastFix({ ...where, tone: "info" });
         request = buildEventRequest({
           eventType,
           campusId,
@@ -200,6 +256,7 @@ export function useAppData(onSignedOut: () => void) {
           isNetworkError,
         );
         const result = describeOutcome(data, status === 200);
+        setLastFix({ ...where, tone: result.tone });
         feel(result);
         setOutcome(result);
         await load();
@@ -274,6 +331,11 @@ export function useAppData(onSignedOut: () => void) {
     dismissError: () => setError(null),
     busy,
     loaded,
+    geofences,
+    lastFix,
+    clearFix: () => setLastFix(null),
+    locating,
+    locateMe,
     load,
     record,
     markRead,
