@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     gps_max_accuracy_m: float = Field(default=30.0, gt=0, le=1_000)
     location_max_age_s: int = Field(default=30, gt=0, le=600)
     request_max_age_s: int = Field(default=15, gt=0, le=600)
+    clock_skew_tolerance_s: int = Field(default=5, ge=0, le=120)
+    geofence_min_area_m2: float = Field(default=100.0, gt=0)
+    geofence_max_area_m2: float = Field(default=5_000_000.0, gt=0)  # 5 km²
 
     @model_validator(mode="after")
     def _check_deployed_environment(self) -> "Settings":

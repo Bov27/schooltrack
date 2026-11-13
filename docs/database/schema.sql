@@ -161,18 +161,20 @@ CREATE TABLE campuses (
 );
 
 -- Authorized areas. GEOGRAPHY keeps distances in metres on the WGS84 ellipsoid.
--- Polygon validity (closed ring, no self-intersection, reasonable area) is
--- checked by the geolocation service before insert (Week 3).
+-- Polygon structure and area bounds are checked by the geolocation service before
+-- insert (ADR-003); the CHECK below is the last line of defence.
 CREATE TABLE geofences (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     institution_id  uuid NOT NULL,
     campus_id       uuid NOT NULL,
     name            text NOT NULL,
-    area            GEOGRAPHY(POLYGON, 4326) NOT NULL,
+    area            GEOGRAPHY(POLYGON, 4326) NOT NULL
+                    CHECK (ST_IsValid(area::geometry) AND ST_Area(area) > 0),
     is_active       boolean NOT NULL DEFAULT true,
     created_at      timestamptz NOT NULL DEFAULT now(),
     created_by      uuid REFERENCES users(id),
     UNIQUE (institution_id, id),
+    UNIQUE (institution_id, campus_id, name),
     FOREIGN KEY (institution_id, campus_id) REFERENCES campuses (institution_id, id)
 );
 CREATE INDEX geofences_area_gist ON geofences USING GIST (area);

@@ -1,21 +1,17 @@
-from typing import Annotated
-
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, status
 
 from app.api.deps import (
     CurrentUserDep,
     PlatformAdminDep,
     PlatformSessionDep,
+    SchoolAdminDep,
     SessionDep,
     SettingsDep,
-    TenantContext,
     TenantDep,
-    require_roles,
 )
 from app.api.errors import error_responses
 from app.core.errors import NotFoundError
 from app.modules.identity.service import IdentityService
-from app.modules.institutions.models import InstitutionRole
 from app.modules.institutions.schemas import (
     CampusCreate,
     CampusOut,
@@ -25,10 +21,6 @@ from app.modules.institutions.schemas import (
 from app.modules.institutions.service import InstitutionService
 
 router = APIRouter()
-
-SchoolAdminDep = Annotated[
-    TenantContext, Depends(require_roles(InstitutionRole.SCHOOL_ADMIN))
-]
 
 _errors = error_responses(401, 403, 409)
 

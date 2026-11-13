@@ -146,4 +146,5 @@ async def require_platform_admin(
 
 
 PlatformAdminDep = Annotated[User, Depends(require_platform_admin)]
+SchoolAdminDep = Annotated[TenantContext, Depends(require_roles(InstitutionRole.SCHOOL_ADMIN))]
 PlatformSessionDep = Annotated[AsyncSession, Depends(get_platform_session)]
