@@ -10,6 +10,7 @@ from app.modules.identity.schemas import (
     LoginRequest,
     MembershipOut,
     MeResponse,
+    PasswordChange,
     RefreshRequest,
     TokenResponse,
 )
@@ -105,3 +106,18 @@ async def list_devices(
 ) -> list[DeviceOut]:
     devices = await IdentityService(session, settings).list_devices(user.id)
     return [DeviceOut.model_validate(d) for d in devices]
+
+
+@router.post(
+    "/users/me/password",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=error_responses(400, 401, 422),
+    tags=["users"],
+)
+async def change_password(
+    body: PasswordChange, user: CurrentUserDep, session: SessionDep, settings: SettingsDep
+) -> None:
+    """Change your password. Every session (including this one) must log in again."""
+    await IdentityService(session, settings).change_password(
+        user, body.current_password, body.new_password
+    )

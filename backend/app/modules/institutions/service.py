@@ -233,6 +233,56 @@ class InstitutionService:
         return institution
 
     # ---- people (tenant context already set) --------------------------------------
+    async def ensure_member(self, institution_id: uuid.UUID, user_id: uuid.UUID) -> None:
+        await self.session.execute(
+            pg_insert(InstitutionMembership)
+            .values(institution_id=institution_id, user_id=user_id, status=MembershipStatus.ACTIVE)
+            .on_conflict_do_nothing(index_elements=["institution_id", "user_id"])
+        )
+
+    async def update_student(
+        self,
+        institution_id: uuid.UUID,
+        student_id: uuid.UUID,
+        *,
+        full_name: str | None,
+        is_active: bool | None,
+        link_user_id: uuid.UUID | None,
+        unlink: bool,
+        granted_by: uuid.UUID,
+    ) -> tuple[Student, dict[str, list[object]]]:
+        student = await self.session.scalar(
+            select(Student)
+            .where(Student.institution_id == institution_id, Student.id == student_id)
+            .with_for_update()
+        )
+        if student is None:
+            raise NotFoundError("Student not found")
+        changes: dict[str, list[object]] = {}
+        if full_name is not None and full_name.strip() != student.full_name:
+            changes["full_name"] = [student.full_name, full_name.strip()]
+            student.full_name = full_name.strip()
+        if is_active is not None and is_active != student.is_active:
+            changes["is_active"] = [student.is_active, is_active]
+            student.is_active = is_active
+        if unlink and student.user_id is not None:
+            changes["user_id"] = [str(student.user_id), None]
+            student.user_id = None
+        elif link_user_id is not None and link_user_id != student.user_id:
+            await self._ensure_member_with_role(
+                institution_id, link_user_id, InstitutionRole.STUDENT, granted_by
+            )
+            changes["user_id"] = [None if student.user_id is None else str(student.user_id),
+                                  str(link_user_id)]
+            student.user_id = link_user_id
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise ConflictError("That account is already linked to another student") from exc
+        await self.session.refresh(student)
+        return student, changes  # the caller audits and commits
+
     async def _ensure_member_with_role(
         self,
         institution_id: uuid.UUID,

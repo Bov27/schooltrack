@@ -27,6 +27,21 @@ export default function PeoplePage() {
     }
   }
 
+  async function updateStudent(student: Student, body: Record<string, unknown>) {
+    setError(null);
+    try {
+      await api(`students/${student.id}`, { method: "PATCH", body: JSON.stringify(body) });
+      students.reload();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  function linkAccount(student: Student) {
+    const email = window.prompt(`Email of the app account for ${student.full_name}:`);
+    if (email) void updateStudent(student, { user_email: email.trim() });
+  }
+
   if (!canList) return <div className="panel muted">Only school administrators and teachers can see this page.</div>;
 
   return (
@@ -34,6 +49,29 @@ export default function PeoplePage() {
       <h2>Students & staff</h2>
       {error && <div className="error">{error}</div>}
       <AdminOnly>
+        <div className="panel">
+          <h3>Create an app account</h3>
+          <p className="muted">
+            For a student, staff member or guardian who will use the mobile app. Share the initial password
+            privately; they can change it from the app. Then link the account below by its email.
+          </p>
+          <form
+            className="inline"
+            onSubmit={(e) => {
+              const f = new FormData(e.currentTarget);
+              void submit(e, "accounts", {
+                email: f.get("email"),
+                full_name: f.get("name"),
+                initial_password: f.get("password"),
+              });
+            }}
+          >
+            <label>Email<input name="email" type="email" required /></label>
+            <label>Full name<input name="name" required /></label>
+            <label>Initial password (12+ characters)<input name="password" type="text" minLength={12} required autoComplete="off" /></label>
+            <button type="submit">Create account</button>
+          </form>
+        </div>
         <div className="panel">
           <h3>Register a student</h3>
           <form
@@ -86,13 +124,26 @@ export default function PeoplePage() {
       <div className="panel">
         <h3>Students ({students.data?.length ?? 0})</h3>
         <table>
-          <thead><tr><th>Code</th><th>Name</th><th>App account</th></tr></thead>
+          <thead><tr><th>Code</th><th>Name</th><th>App account</th><th>Status</th>{isAdmin && <th />}</tr></thead>
           <tbody>
             {students.data?.map((s) => (
               <tr key={s.id}>
                 <td>{s.student_code}</td>
                 <td>{s.full_name}</td>
-                <td>{s.user_id ? "linked" : <span className="muted">none (manual attendance)</span>}</td>
+                <td>{s.user_id ? <span className="badge ok">linked</span> : <span className="muted">none (manual attendance)</span>}</td>
+                <td><span className={`badge ${s.is_active ? "ok" : "neutral"}`}>{s.is_active ? "active" : "inactive"}</span></td>
+                {isAdmin && (
+                  <td style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {s.user_id ? (
+                      <button className="secondary" onClick={() => void updateStudent(s, { unlink_account: true })}>Unlink account</button>
+                    ) : (
+                      <button className="secondary" onClick={() => linkAccount(s)}>Link account</button>
+                    )}
+                    <button className="secondary" onClick={() => void updateStudent(s, { is_active: !s.is_active })}>
+                      {s.is_active ? "Deactivate" : "Activate"}
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

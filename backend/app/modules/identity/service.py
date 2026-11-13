@@ -6,10 +6,11 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.core.errors import AuthenticationError
+from app.core.errors import AuthenticationError, ConflictError, DomainError
 from app.core.security import (
     InvalidTokenError,
     create_token,
@@ -99,6 +100,40 @@ class IdentityService:
         if stored is not None and stored.user_id == claims.subject:
             await self._revoke_family(stored.family_id)
             await self.session.commit()
+
+    # ---- accounts -----------------------------------------------------------------
+    async def create_account(self, *, email: str, full_name: str, password: str) -> User:
+        """Create an active account with an initial password chosen by an administrator.
+        The person should change it on first use (POST /users/me/password)."""
+        user = User(
+            email=normalize_email(email),
+            full_name=full_name.strip(),
+            password_hash=hash_password(password),
+        )
+        self.session.add(user)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise ConflictError(
+                "An account with that email already exists; link it by email instead"
+            ) from exc
+        await self.session.refresh(user)
+        return user  # the caller commits, together with the membership and audit entry
+
+    async def change_password(self, user: User, current: str, new: str) -> None:
+        """Change the password and sign out every session (all refresh tokens)."""
+        if not verify_password(current, user.password_hash):
+            # 400, not 401: a wrong current password must not look like an expired session.
+            raise DomainError("Current password is incorrect")
+        user.password_hash = hash_password(new)
+        user.updated_at = datetime.now(UTC)
+        await self.session.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
+            .values(revoked_at=datetime.now(UTC))
+        )
+        await self.session.commit()
 
     async def is_platform_admin(self, user_id: uuid.UUID) -> bool:
         return await self.session.get(PlatformAdmin, user_id) is not None
