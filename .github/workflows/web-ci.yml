@@ -22,10 +22,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
 
-      - name: Install
-        # Uses the committed lockfile when present (npm ci), otherwise resolves one.
-        run: if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+      - name: Install (reproducible, from the committed lockfile)
+        run: npm ci
 
       - name: Type check
         run: npm run typecheck
@@ -39,13 +40,3 @@ jobs:
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
-
-      - name: Print resolved lockfile (temporary, to commit it)
-        run: echo "LOCKFILE_B64_START $(gzip -9c package-lock.json | base64 -w0) LOCKFILE_B64_END"
-
-      - name: Upload resolved lockfile
-        if: ${{ always() && hashFiles('apps/web/package-lock.json') != '' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-package-lock
-          path: apps/web/package-lock.json

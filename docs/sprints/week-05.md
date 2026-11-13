@@ -40,6 +40,7 @@ Week 5 ships in two pull requests: the admin dashboard (5a) and the mobile app (
 - **No map yet.** Geofences are created from coordinates or GeoJSON, and
   "test a point" gives immediate feedback. A map editor (Leaflet) is a later
   improvement that will not change the API.
-- **Lockfile:** the authoring environment had no access to the npm registry.
-  CI resolves dependencies and uploads `package-lock.json` as an artifact,
-  which is then committed so later installs are reproducible.
+- **Lockfile:** the authoring environment had no access to the npm registry,
+  so the first CI run resolved the dependency tree. Its `package-lock.json`
+  was then committed (Next 15.5.29, React 19.3.1), and CI and Docker now
+  install with `npm ci`.
