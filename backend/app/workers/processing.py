@@ -210,3 +210,39 @@ def deliver_notifications(
                 ),
             )
     return sent
+
+
+def purge_expired_locations(
+    conn: psycopg.Connection[Any], retention_days: int, batch_size: int = 1000
+) -> int:
+    """Privacy retention: clear the precise coordinates of events older than the retention
+    period. The geofence result, distance and validation status stay, so attendance history
+    and reports are unaffected. Returns the number of events purged in this batch."""
+    with conn.transaction(), conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE attendance_events
+            SET location = NULL, gps_accuracy_m = NULL, location_captured_at = NULL,
+                location_purged_at = now()
+            WHERE id IN (
+                SELECT id FROM attendance_events
+                WHERE location IS NOT NULL
+                  AND occurred_at < now() - make_interval(days => %s)
+                ORDER BY occurred_at
+                LIMIT %s
+                FOR UPDATE SKIP LOCKED
+            )
+            """,
+            (retention_days, batch_size),
+        )
+        return cur.rowcount
+
+
+def delete_processed_outbox(conn: psycopg.Connection[Any], retention_days: int) -> int:
+    with conn.transaction(), conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM outbox_events WHERE processed_at IS NOT NULL "
+            "AND processed_at < now() - make_interval(days => %s)",
+            (retention_days,),
+        )
+        return cur.rowcount

@@ -82,3 +82,16 @@ jobs:
       - name: Tests
         if: ${{ !cancelled() }}
         run: pytest --cov --cov-report=term-missing
+
+      - name: Load test (school-opening burst against uvicorn with 2 workers)
+        if: success()
+        run: |
+          uvicorn app.main:app_factory --factory --workers 2 --port 8000 --log-level warning &
+          for i in $(seq 1 30); do
+            curl -fsS http://localhost:8000/api/v1/health/ready > /dev/null && break
+            sleep 1
+          done
+          # NFR-PERF-1: phones arriving at 50 req/s (open loop).
+          python -m loadtest.attendance_load --students 300 --rate 50 --concurrency 100
+          # Saturation: how far the same setup goes with 50 requests always in flight.
+          python -m loadtest.attendance_load --students 300 --concurrency 50

@@ -17,6 +17,10 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     cors_origins: list[str] = Field(default_factory=list)
+    # Requests larger than this are refused with 413 before the body is read.
+    max_request_bytes: int = Field(default=1_048_576, ge=1024)
+    # Interactive API docs; off by default in staging/production.
+    expose_docs: bool | None = None
 
     # Runtime connection: must use the least-privileged role (schooltrack_app), so RLS applies.
     database_url: PostgresDsn
@@ -31,6 +35,10 @@ class Settings(BaseSettings):
     redis_url: str | None = None
     push_provider: Literal["log", "expo"] = "log"
     notification_max_attempts: int = Field(default=5, ge=1, le=20)
+    # Data retention (privacy): precise coordinates are purged after this many days, keeping
+    # the validation result; processed outbox rows are deleted after outbox_retention_days.
+    location_retention_days: int = Field(default=90, ge=1, le=3650)
+    outbox_retention_days: int = Field(default=30, ge=1, le=3650)
     login_max_attempts: int = Field(default=10, ge=1)
     login_window_s: int = Field(default=900, ge=60)
     db_pool_size: int = Field(default=10, ge=1, le=100)
@@ -69,6 +77,10 @@ class Settings(BaseSettings):
             if self.db_echo:
                 raise ValueError("db_echo would log personal data; disable it outside local/test")
         return self
+
+    @property
+    def docs_enabled(self) -> bool:
+        return self.expose_docs if self.expose_docs is not None else not self.is_deployed
 
     @property
     def is_deployed(self) -> bool:

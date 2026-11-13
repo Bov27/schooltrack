@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from redis.asyncio import Redis
 
 from app import __version__
@@ -38,11 +39,12 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
             if redis is not None:
                 await redis.aclose()
 
+    docs = settings.docs_enabled
     app = FastAPI(
         title=settings.app_name,
         version=__version__,
-        openapi_url=f"{settings.api_v1_prefix}/openapi.json",
-        docs_url=f"{settings.api_v1_prefix}/docs",
+        openapi_url=f"{settings.api_v1_prefix}/openapi.json" if docs else None,
+        docs_url=f"{settings.api_v1_prefix}/docs" if docs else None,
         redoc_url=None,
         lifespan=lifespan,
     )
@@ -56,6 +58,45 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+    docs_prefix = f"{settings.api_v1_prefix}/docs"
+    static_headers = {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "Referrer-Policy": "no-referrer",
+        # Responses carry personal data: never store them in shared or browser caches.
+        "Cache-Control": "no-store",
+    }
+    if settings.is_deployed:
+        static_headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
+    @app.middleware("http")
+    async def security_middleware(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        declared = request.headers.get("content-length")
+        too_large = declared is not None and (
+            not declared.isdigit() or int(declared) > settings.max_request_bytes
+        )
+        if too_large:
+            response: Response = JSONResponse(
+                status_code=413,
+                content={
+                    "error": {
+                        "code": "payload_too_large",
+                        "message": f"Request body exceeds {settings.max_request_bytes} bytes",
+                    }
+                },
+            )
+        else:
+            response = await call_next(request)
+        response.headers.update(static_headers)
+        if not request.url.path.startswith(docs_prefix):
+            # JSON API: nothing may be loaded or framed (the Swagger UI needs its CDN assets).
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'none'; frame-ancestors 'none'"
+            )
+        return response
 
     @app.middleware("http")
     async def request_id_middleware(

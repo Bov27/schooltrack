@@ -23,9 +23,11 @@ processing children's and adolescents' data.
   requested.
 - **Purpose limitation**: location is used only to validate the attendance
   event.
-- **Retention**: precise coordinates are kept for a limited period (proposed
-  90 days, configurable). After that, only the validation result
-  (`geofence_result`, distance band) is kept.
+- **Retention**: precise coordinates are kept for a limited period (90 days by
+  default, `LOCATION_RETENTION_DAYS`). After that, an hourly worker job clears
+  them and keeps only the validation result (`geofence_result`, distance,
+  status). The database only allows the worker role to do this, and only
+  that (implemented in Week 7b).
 - **Access control**: guardians see only linked students; teachers see only
   assigned classrooms; tenant isolation is enforced in the database (ADR-002).
 - **Demonstration data is fictional**: the repository never contains real
