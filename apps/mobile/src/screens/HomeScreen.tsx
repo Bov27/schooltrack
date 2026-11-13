@@ -6,11 +6,13 @@ import {
   type AttendanceEvent,
   EVENT_LABELS,
   type EventType,
+  HISTORY_LABELS,
   type Outcome,
   STATE_LABELS,
   type SubjectState,
   buildEventRequest,
   describeOutcome,
+  ownHistoryPath,
   withRetries,
 } from "../core/attendance";
 import { LocationPermissionError, api, currentFix, newIdempotencyKey } from "../platform/services";
@@ -42,6 +44,7 @@ export function HomeScreen({ onSignedOut }: { onSignedOut: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   const handle = useCallback(
     (e: unknown) => {
@@ -60,16 +63,18 @@ export function HomeScreen({ onSignedOut }: { onSignedOut: () => void }) {
       if (!memberships.some((m) => m.institution_id === api.institutionId) && memberships[0]) {
         await api.selectInstitution(memberships[0].institution_id);
       }
-      const [campusList, states, events] = await Promise.all([
+      const [campusList, states] = await Promise.all([
         api.request<Campus[]>("campuses"),
         api.request<SubjectState[]>("attendance/state"),
-        api.request<AttendanceEvent[]>("attendance/events?limit=15"),
       ]);
+      const mine = states[0] ?? null;
+      const historyPath = ownHistoryPath(mine);
       setCampuses(campusList);
       setCampusId((current) => current ?? campusList[0]?.id ?? null);
-      setState(states[0] ?? null);
-      setHistory(events);
+      setState(mine);
+      setHistory(historyPath ? await api.request<AttendanceEvent[]>(historyPath) : []);
       setError(null);
+      setLoaded(true);
     } catch (e) {
       handle(e);
     }
@@ -106,7 +111,7 @@ export function HomeScreen({ onSignedOut }: { onSignedOut: () => void }) {
     }
   }
 
-  if (!me) return <ActivityIndicator style={{ flex: 1 }} size="large" />;
+  if (!me || (!loaded && !error)) return <ActivityIndicator style={{ flex: 1 }} size="large" />;
   const membership = me.memberships.find((m) => m.institution_id === api.institutionId);
 
   return (
@@ -155,7 +160,8 @@ export function HomeScreen({ onSignedOut }: { onSignedOut: () => void }) {
       {state === null ? (
         <View style={styles.card}>
           <Text style={styles.muted}>
-            Tu cuenta no está vinculada a un estudiante o funcionario en esta institución.
+            Tu cuenta no está vinculada a un estudiante o funcionario en esta institución. Pide a la
+            institución que registre tu correo como cuenta de la app.
           </Text>
         </View>
       ) : (
@@ -199,15 +205,15 @@ export function HomeScreen({ onSignedOut }: { onSignedOut: () => void }) {
         </View>
       )}
 
-      <Text style={styles.section}>Últimos registros</Text>
+      {state !== null && <Text style={styles.section}>Mis últimos registros</Text>}
       {history.map((event) => (
         <View key={event.id} style={styles.historyRow}>
-          <Text style={styles.historyType}>{EVENT_LABELS[event.event_type].replace("Registrar ", "")}</Text>
+          <Text style={styles.historyType}>{HISTORY_LABELS[event.event_type]}</Text>
           <Text style={styles.muted}>{new Date(event.occurred_at).toLocaleString("es-CO")}</Text>
           <Text style={statusStyle(event.validation_status)}>{statusLabel(event.validation_status)}</Text>
         </View>
       ))}
-      {history.length === 0 && <Text style={styles.muted}>Aún no tienes registros.</Text>}
+      {state !== null && history.length === 0 && <Text style={styles.muted}>Aún no tienes registros.</Text>}
     </ScrollView>
   );
 }

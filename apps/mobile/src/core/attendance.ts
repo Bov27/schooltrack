@@ -74,6 +74,22 @@ export const EVENT_LABELS: Record<EventType, string> = {
   CHECK_OUT: "Registrar salida",
 };
 
+/** Short names for the history list. */
+export const HISTORY_LABELS: Record<EventType, string> = {
+  CHECK_IN: "Entrada",
+  TEMPORARY_CHECK_OUT: "Salida temporal",
+  RETURN: "Regreso",
+  CHECK_OUT: "Salida",
+};
+
+/** History query for the person using the app. Admin accounts can read every event of
+ * the institution, so the app always asks explicitly for its own subject's events. */
+export function ownHistoryPath(state: SubjectState | null, limit = 15): string | null {
+  if (state === null) return null;
+  const key = state.subject === "STUDENT" ? "student_id" : "staff_id";
+  return `attendance/events?limit=${limit}&${key}=${encodeURIComponent(state.subject_id)}`;
+}
+
 export const STATE_LABELS: Record<AttendanceState, string> = {
   OUTSIDE: "Fuera de la institución",
   PRESENT: "En la institución",

@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { type AttendanceEvent, buildEventRequest, describeOutcome, reasonMessage, withRetries } from "./attendance";
+import {
+  type AttendanceEvent,
+  buildEventRequest,
+  describeOutcome,
+  ownHistoryPath,
+  reasonMessage,
+  withRetries,
+} from "./attendance";
 
 const FIX = { latitude: 2.4419, longitude: -76.6063, accuracy: 8, timestamp: Date.UTC(2027, 1, 1, 12) };
 
@@ -121,5 +128,20 @@ describe("withRetries", () => {
     await expect(
       withRetries(async () => Promise.reject(new TypeError("offline")), () => true, 2, noDelay),
     ).rejects.toThrow("offline");
+  });
+});
+
+describe("ownHistoryPath", () => {
+  it("asks only for the user's own events", () => {
+    expect(
+      ownHistoryPath({ subject: "STUDENT", subject_id: "s-1", state: "OUTSIDE", allowed_events: ["CHECK_IN"] }),
+    ).toBe("attendance/events?limit=15&student_id=s-1");
+    expect(
+      ownHistoryPath({ subject: "STAFF", subject_id: "t-1", state: "PRESENT", allowed_events: [] }, 5),
+    ).toBe("attendance/events?limit=5&staff_id=t-1");
+  });
+
+  it("loads no history for an account without a student or staff record", () => {
+    expect(ownHistoryPath(null)).toBeNull();
   });
 });
