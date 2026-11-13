@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import ConflictError, DomainError, NotFoundError, PermissionDeniedError
+from app.infrastructure.orm import set_current_institution
 from app.modules.attendance.repository import AttendanceRepository, NewEvent
 from app.modules.attendance.schemas import (
     AttendanceEventCreate,
@@ -35,7 +36,6 @@ from app.modules.attendance.state_machine import (
     InvalidTransitionError,
     next_state,
 )
-from app.infrastructure.orm import set_current_institution
 from app.modules.audit.service import AuditService
 from app.modules.geolocation.rules import Verdict
 from app.modules.geolocation.service import GeolocationService

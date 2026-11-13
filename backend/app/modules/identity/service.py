@@ -158,12 +158,13 @@ class IdentityService:
         return list(result)
 
     async def active_device(self, user_id: uuid.UUID, device_id: uuid.UUID) -> Device | None:
-        return await self.session.scalar(
+        device: Device | None = await self.session.scalar(
             select(Device).where(
                 Device.id == device_id,
                 Device.user_id == user_id,
                 Device.status == DeviceStatus.ACTIVE,
             )
+        return device
         )
 
     async def _issue_pair(
