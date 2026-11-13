@@ -90,12 +90,18 @@ def test_only_the_worker_may_purge(owner_conn: Any, factory: Factory) -> None:
     # Not even the owner/superuser connection.
     with pytest.raises(psycopg.errors.InsufficientPrivilege):
         owner_conn.execute(purge, (event_id,))
+    # The API role, with the tenant context set so that RLS lets it see the row.
+    institution = owner_conn.execute(
+        "SELECT institution_id::text FROM attendance_events WHERE id = %s", (event_id,)
+    ).fetchone()[0]
     with psycopg.connect(_dsn("DATABASE_URL")) as app_conn:
         app_conn.execute(
-            "SELECT set_config('app.current_institution_id', institution_id::text, true) "
-            "FROM attendance_events WHERE id = %s",
-            (event_id,),
+            "SELECT set_config('app.current_institution_id', %s, true)", (institution,)
         )
+        visible = app_conn.execute(
+            "SELECT count(*) FROM attendance_events WHERE id = %s", (event_id,)
+        ).fetchone()
+        assert visible == (1,)
         with pytest.raises(psycopg.errors.InsufficientPrivilege):
             app_conn.execute(purge, (event_id,))
 

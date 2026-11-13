@@ -147,6 +147,13 @@ async def run_phase(
     return phase
 
 
+def _append_job_summary(report: str) -> None:
+    summary = os.environ.get("GITHUB_STEP_SUMMARY")
+    if summary:
+        with open(summary, "a", encoding="utf-8") as handle:
+            handle.write(report + "\n")
+
+
 async def main_async(args: argparse.Namespace) -> int:
     settings = Settings()  # reads JWT_SECRET / DATABASE_URL from the environment
     owner_dsn = _dsn(os.environ["MIGRATIONS_DATABASE_URL"])
@@ -245,10 +252,7 @@ async def main_async(args: argparse.Namespace) -> int:
     ]
     report = "\n".join(lines)
     print(report)
-    summary = os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary:
-        with open(summary, "a", encoding="utf-8") as handle:
-            handle.write(report + "\n")
+    _append_job_summary(report)
     if problems:
         return 1
     if args.enforce_nfr and not nfr_ok:
