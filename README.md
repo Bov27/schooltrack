@@ -54,6 +54,7 @@ docker compose up --build
 This starts PostGIS, runs the migrations with the owner role, and starts the
 API with the restricted runtime role.
 
+- Admin dashboard: <http://localhost:3000>
 - API docs: <http://localhost:8000/api/v1/docs>
 - Readiness: <http://localhost:8000/api/v1/health/ready>. It reports the
   database, the PostGIS version, and whether RLS is enforced for the API's
@@ -96,6 +97,7 @@ pytest --cov                            # integration tests run when DATABASE_UR
 ## Repository layout
 
 ```
+apps/web/                Next.js admin dashboard (BFF: tokens stay in httpOnly cookies)
 backend/                 FastAPI application, Alembic migrations, tests
 infrastructure/docker/   database initialisation (runtime role)
 docs/
@@ -108,7 +110,8 @@ docs/
 .github/workflows/       CI
 ```
 
-`apps/mobile` and `apps/web` are added in Week 5. Business modules under
+`apps/web` is the Next.js admin dashboard (`cd apps/web && npm install && npm run dev`, with
+the API on port 8000). `apps/mobile` is added in Week 5b. Business modules under
 `backend/app/modules/` are added when they get their first feature.
 
 ## Roadmap
