@@ -35,15 +35,16 @@ def test_seed_refuses_to_run_twice(owner_conn: psycopg.Connection[Any], demo: uu
 
 
 def test_admin_sees_two_weeks_of_attendance(api: TestClient, demo: uuid.UUID) -> None:
-    end = datetime.now(UTC).date()
+    seeded = _school_days(datetime.now(UTC).date(), 10)  # the days seed_demo fills
     response = api.get(
         "/api/v1/analytics/attendance",
-        params={"from": (end - timedelta(days=21)).isoformat(), "to": end.isoformat()},
+        params={"from": seeded[0].isoformat(), "to": seeded[-1].isoformat()},
         headers=auth(api, ADMIN),
     )
     assert response.status_code == 200, response.text
     body = response.json()
     assert len(body["students"]) == 8
+    assert body["school_days"] == 10
     assert 0.6 < body["overall_rate"] < 1
     assert sum(s["flagged_events"] for s in body["students"]) > 0
 
