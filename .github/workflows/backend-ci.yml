@@ -91,4 +91,7 @@ jobs:
             curl -fsS http://localhost:8000/api/v1/health/ready > /dev/null && break
             sleep 1
           done
+          # NFR-PERF-1: phones arriving at 50 req/s (open loop).
+          python -m loadtest.attendance_load --students 300 --rate 50 --concurrency 100
+          # Saturation: how far the same setup goes with 50 requests always in flight.
           python -m loadtest.attendance_load --students 300 --concurrency 50
