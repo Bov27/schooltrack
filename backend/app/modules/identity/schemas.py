@@ -73,3 +73,32 @@ class DeviceOut(BaseModel):
     status: DeviceStatus
     registered_at: datetime
     last_seen_at: datetime | None
+
+
+Password = Annotated[str, StringConstraints(min_length=12, max_length=128)]
+
+
+class AccountCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    email: Annotated[
+        str,
+        StringConstraints(
+            strip_whitespace=True, min_length=3, max_length=320, pattern=r"^[^@\s]+@[^@\s]+$"
+        ),
+    ]
+    full_name: str = Field(min_length=1, max_length=200)
+    initial_password: Password
+
+
+class AccountOut(BaseModel):
+    id: uuid.UUID
+    email: str
+    full_name: str
+
+
+class PasswordChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    current_password: str = Field(min_length=1, max_length=1024)
+    new_password: Password

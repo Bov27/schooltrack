@@ -25,6 +25,7 @@ export function useSession(): Session {
 const LINKS = [
   { href: "/", label: "Overview" },
   { href: "/attendance", label: "Attendance" },
+  { href: "/analytics", label: "Analytics" },
   { href: "/campuses", label: "Campuses & geofences" },
   { href: "/people", label: "Students & staff" },
 ];

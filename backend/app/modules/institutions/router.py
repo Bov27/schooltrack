@@ -14,6 +14,7 @@ from app.api.deps import (
 from app.api.errors import error_responses
 from app.core.errors import NotFoundError, PermissionDeniedError
 from app.modules.audit.service import AuditService
+from app.modules.identity.schemas import AccountCreate, AccountOut
 from app.modules.identity.service import IdentityService
 from app.modules.institutions.models import InstitutionRole
 from app.modules.institutions.schemas import (
@@ -30,6 +31,7 @@ from app.modules.institutions.schemas import (
     StaffOut,
     StudentCreate,
     StudentOut,
+    StudentUpdate,
 )
 from app.modules.institutions.service import InstitutionService
 
@@ -283,3 +285,78 @@ async def link_guardian(
     )
     await session.commit()
     return {"guardian_id": str(guardian_id), "student_id": str(body.student_id)}
+
+
+@router.post(
+    "/accounts",
+    response_model=AccountOut,
+    status_code=status.HTTP_201_CREATED,
+    responses=error_responses(401, 403, 409, 422),
+    tags=["people"],
+)
+async def create_account(
+    body: AccountCreate,
+    request: Request,
+    tenant: SchoolAdminDep,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> AccountOut:
+    """Create an app account (active member of this institution, no role yet). Then link
+    it to a student, staff member or guardian by email. The person should change the
+    initial password on first use."""
+    user = await IdentityService(session, settings).create_account(
+        email=body.email, full_name=body.full_name, password=body.initial_password
+    )
+    await InstitutionService(session).ensure_member(tenant.institution_id, user.id)
+    await AuditService(session).record(
+        institution_id=tenant.institution_id,
+        actor_user_id=tenant.user_id,
+        action="account.created",
+        entity_type="user",
+        entity_id=user.id,
+        changes={"email": user.email},
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+    return AccountOut(id=user.id, email=user.email, full_name=user.full_name)
+
+
+@router.patch(
+    "/students/{student_id}",
+    response_model=StudentOut,
+    responses=error_responses(401, 403, 404, 409),
+    tags=["people"],
+)
+async def update_student(
+    student_id: uuid.UUID,
+    body: StudentUpdate,
+    request: Request,
+    tenant: SchoolAdminDep,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> StudentOut:
+    """Rename, activate/deactivate, or link/unlink the student's app account. Audited."""
+    link_user_id = None
+    if body.user_email:
+        link_user_id = await _user_id_for(body.user_email, session, settings)
+    student, changes = await InstitutionService(session).update_student(
+        tenant.institution_id,
+        student_id,
+        full_name=body.full_name,
+        is_active=body.is_active,
+        link_user_id=link_user_id,
+        unlink=body.unlink_account,
+        granted_by=tenant.user_id,
+    )
+    if changes:
+        await AuditService(session).record(
+            institution_id=tenant.institution_id,
+            actor_user_id=tenant.user_id,
+            action="student.updated",
+            entity_type="student",
+            entity_id=student_id,
+            changes=changes,
+            request_id=getattr(request.state, "request_id", None),
+        )
+    await session.commit()
+    return StudentOut.model_validate(student)
