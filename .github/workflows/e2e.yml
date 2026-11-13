@@ -28,7 +28,7 @@ jobs:
       SCHOOLTRACK_DEMO_PASSWORD: e2e-demo-password-2026
       JWT_SECRET: e2e-only-secret-0123456789abcdef0123456789
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build and start the stack
         run: docker compose up -d --build
