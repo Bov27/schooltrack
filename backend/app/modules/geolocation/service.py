@@ -103,5 +103,5 @@ class GeolocationService:
         if not low <= area_m2 <= high:
             raise InvalidGeometryError(
                 f"Geofence area {area_m2:,.0f} m² is outside the allowed range "
-                f"{low:,.0f}–{high:,.0f} m²"
+                f"{low:,.0f} to {high:,.0f} m²"
             )

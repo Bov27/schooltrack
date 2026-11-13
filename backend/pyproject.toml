@@ -58,6 +58,8 @@ extend-immutable-calls = ["fastapi.Depends"]
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105", "S106"]   # asserts and fictional credentials
 "migrations/**" = ["E501", "S608"]   # SQL built from module constants, no user input
+# Repositories compose SQL from module-level fragments; every value is a bound parameter.
+"app/modules/*/repository.py" = ["S608"]
 
 [tool.mypy]
 python_version = "3.12"
