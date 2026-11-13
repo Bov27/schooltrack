@@ -1,0 +1,68 @@
+name: backend-ci
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", "infrastructure/**", ".github/workflows/backend-ci.yml"]
+  pull_request:
+    paths: ["backend/**", "infrastructure/**", ".github/workflows/backend-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      db:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_DB: schooltrack
+          POSTGRES_USER: schooltrack
+          POSTGRES_PASSWORD: ci_owner
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U schooltrack -d schooltrack"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+
+    env:
+      MIGRATIONS_DATABASE_URL: postgresql+psycopg://schooltrack:ci_owner@localhost:5432/schooltrack
+      DATABASE_URL: postgresql+psycopg://schooltrack_app:ci_app@localhost:5432/schooltrack
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      - name: Ruff
+        run: ruff check .
+
+      - name: Mypy
+        run: mypy app
+
+      - name: Create runtime role (same script as docker compose)
+        working-directory: .
+        env:
+          PGHOST: localhost
+          PGPASSWORD: ci_owner
+          POSTGRES_USER: schooltrack
+          POSTGRES_DB: schooltrack
+          SCHOOLTRACK_APP_DB_PASSWORD: ci_app
+        run: bash infrastructure/docker/postgres/initdb/20-create-app-role.sh
+
+      - name: Migrations (upgrade, downgrade, upgrade)
+        run: alembic upgrade head && alembic downgrade base && alembic upgrade head
+
+      - name: Tests
+        run: pytest --cov --cov-report=term-missing

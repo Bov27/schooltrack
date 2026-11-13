@@ -1,0 +1,54 @@
+# Local development stack. Every value has a development default, so
+# `docker compose up --build` works without a .env file. Copy .env.example to .env to override.
+name: schooltrack
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-schooltrack}
+      POSTGRES_USER: ${POSTGRES_USER:-schooltrack}            # owner role: migrations only
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-schooltrack_owner_dev}
+      SCHOOLTRACK_APP_DB_PASSWORD: ${SCHOOLTRACK_APP_DB_PASSWORD:-schooltrack_app_dev}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      # Mounted as a single file so the image's own 10_postgis.sh init script stays in place.
+      - ./infrastructure/docker/postgres/initdb/20-create-app-role.sh:/docker-entrypoint-initdb.d/20-create-app-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build: ./backend
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      MIGRATIONS_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-schooltrack}:${POSTGRES_PASSWORD:-schooltrack_owner_dev}@db:5432/${POSTGRES_DB:-schooltrack}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: ./backend
+    environment:
+      ENVIRONMENT: local
+      # Runtime role: RLS applies to it.
+      DATABASE_URL: postgresql+psycopg://schooltrack_app:${SCHOOLTRACK_APP_DB_PASSWORD:-schooltrack_app_dev}@db:5432/${POSTGRES_DB:-schooltrack}
+      CORS_ORIGINS: '["http://localhost:3000"]'
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/ready')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db-data:

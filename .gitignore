@@ -1,0 +1,31 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Node / Expo / Next.js (Week 5)
+node_modules/
+.expo/
+.next/
+out/
+
+# Editors and OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
