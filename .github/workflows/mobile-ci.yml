@@ -22,9 +22,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
 
-      - name: Install
-        run: if [ -f package-lock.json ]; then npm ci; else npm install --no-audit --no-fund; fi
+      - name: Install (reproducible, from the committed lockfile)
+        run: npm ci
 
       - name: Expo SDK version alignment
         run: npx expo install --check
@@ -40,7 +42,3 @@ jobs:
       - name: Bundle (Android) to catch import and Metro errors
         if: ${{ !cancelled() }}
         run: npx expo export --platform android --output-dir /tmp/expo-export
-
-      - name: Print resolved lockfile (temporary, to commit it)
-        if: ${{ hashFiles('apps/mobile/package-lock.json') != '' }}
-        run: echo "LOCKFILE_B64_START $(gzip -9c package-lock.json | base64 -w0) LOCKFILE_B64_END"
