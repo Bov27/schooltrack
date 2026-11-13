@@ -1,12 +1,22 @@
 "use client";
 
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useMemo, useState } from "react";
+
+import { CampusMap, type Draft, type LatLng, type MapMode, type MapPoint } from "@/components/CampusMap";
 
 import { Icon } from "@/components/Icon";
 import { AdminOnly, Message, PageHead, StatusBadge, useSession } from "@/components/Shell";
 import { api, useApi } from "@/lib/client";
-import { formatArea, parseLatLng, reasonLabel, statusLabel } from "@/lib/format";
-import type { Campus, Geofence, LocationVerdict } from "@/lib/types";
+import {
+  EVENT_LABELS,
+  formatArea,
+  formatDateTime,
+  parseLatLng,
+  reasonLabel,
+  statusLabel,
+  statusTone,
+} from "@/lib/format";
+import type { AttendanceEvent, Campus, Geofence, LocationVerdict } from "@/lib/types";
 
 function useFormAction() {
   const [error, setError] = useState<string | null>(null);
@@ -190,6 +200,210 @@ function GeofenceActions({ geofence, onChanged }: { geofence: Geofence; onChange
   );
 }
 
+const EMPTY_DRAFT: Draft = { polygon: [], circle: { center: null, radius: 80 } };
+
+const MODE_HINTS: Record<MapMode, string> = {
+  view: "Verde: geocerca activa. Gris punteado: inactiva. Los puntos son los últimos registros.",
+  test: "Toca un punto del mapa para ver si una entrada desde ahí sería válida. No se guarda nada.",
+  polygon: "Toca las esquinas del colegio en orden. Con tres o más puntos ya puedes guardar.",
+  circle: "Toca el centro del colegio y ajusta el radio.",
+};
+
+function toneOf(status: string): MapPoint["tone"] {
+  const tone = statusTone(status);
+  return tone === "neutral" ? "warn" : tone;
+}
+
+/** The campus map: see the geofences, test a point, or draw a new geofence. */
+function GeofenceMapPanel({ campus, geofences, onCreated }: {
+  campus: Campus;
+  geofences: Geofence[];
+  onCreated: () => void;
+}) {
+  const { isAdmin } = useSession();
+  const events = useApi<AttendanceEvent[]>(isAdmin ? "attendance/events?limit=200" : null);
+  const [mode, setMode] = useState<MapMode>("view");
+  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [probe, setProbe] = useState<MapPoint | null>(null);
+  const [verdict, setVerdict] = useState<LocationVerdict | null>(null);
+  const [accuracy, setAccuracy] = useState(10);
+  const [name, setName] = useState("Perímetro");
+  const action = useFormAction();
+
+  const points = useMemo<MapPoint[]>(
+    () =>
+      (events.data ?? [])
+        .filter((e) => e.campus_id === campus.id && e.location)
+        .slice(0, 60)
+        .map((e) => ({
+          id: e.id,
+          position: [e.location?.latitude ?? 0, e.location?.longitude ?? 0] as LatLng,
+          tone: toneOf(e.validation_status),
+          label: `${EVENT_LABELS[e.event_type] ?? e.event_type}, ${formatDateTime(e.occurred_at)}: ${statusLabel(e.validation_status)}`,
+        })),
+    [events.data, campus.id],
+  );
+
+  function choose(next: MapMode) {
+    setMode(next);
+    setDraft(EMPTY_DRAFT);
+    setProbe(null);
+    setVerdict(null);
+  }
+
+  function onMapClick([lat, lng]: LatLng) {
+    if (mode === "polygon") setDraft((d) => ({ ...d, polygon: [...d.polygon, [lat, lng]] }));
+    if (mode === "circle") setDraft((d) => ({ ...d, circle: { ...d.circle, center: [lat, lng] } }));
+    if (mode === "test") {
+      void action.run(async () => {
+        const result = await api<LocationVerdict>("geofences/check", {
+          method: "POST",
+          body: JSON.stringify({
+            campus_id: campus.id,
+            latitude: lat,
+            longitude: lng,
+            accuracy_m: accuracy,
+            captured_at: new Date().toISOString(),
+          }),
+        });
+        setVerdict(result);
+        setProbe({ id: "probe", position: [lat, lng], tone: toneOf(result.verdict), label: statusLabel(result.verdict) });
+      });
+    }
+  }
+
+  const canSave =
+    name.trim().length > 0 &&
+    ((mode === "polygon" && draft.polygon.length >= 3) || (mode === "circle" && draft.circle.center !== null));
+
+  function save() {
+    void action.run(async () => {
+      const body: Record<string, unknown> = { campus_id: campus.id, name: name.trim() };
+      if (mode === "polygon") {
+        const ring = draft.polygon.map(([lat, lng]) => [lng, lat]);
+        const first = ring[0];
+        if (first) ring.push(first); // GeoJSON rings are closed
+        body.area = { type: "Polygon", coordinates: [ring] };
+      } else if (draft.circle.center) {
+        const [latitude, longitude] = draft.circle.center;
+        body.center = { latitude, longitude };
+        body.radius_m = draft.circle.radius;
+      }
+      await api<Geofence>("geofences", { method: "POST", body: JSON.stringify(body) });
+      choose("view");
+      onCreated();
+      return `Geocerca "${name.trim()}" creada`;
+    });
+  }
+
+  const modes: { value: MapMode; label: string }[] = [
+    { value: "view", label: "Ver" },
+    { value: "test", label: "Probar un punto" },
+    ...(isAdmin
+      ? [
+          { value: "polygon" as const, label: "Dibujar polígono" },
+          { value: "circle" as const, label: "Dibujar círculo" },
+        ]
+      : []),
+  ];
+
+  return (
+    <div className="map-panel">
+      <div className="panel-head" style={{ marginBottom: 10 }}>
+        <div className="segmented" role="group" aria-label="Qué hacer en el mapa">
+          {modes.map((m) => (
+            <button key={m.value} type="button" aria-pressed={mode === m.value} onClick={() => choose(m.value)}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="muted small" style={{ marginBottom: 10 }}>{MODE_HINTS[mode]}</p>
+      {action.error && <Message tone="error">{action.error}</Message>}
+      {action.message && mode === "view" && <Message tone="success">{action.message}</Message>}
+
+      <CampusMap geofences={geofences} points={points} mode={mode} draft={draft} probe={probe} onMapClick={onMapClick} />
+
+      {mode === "test" && (
+        <div className="map-controls">
+          <label>
+            Precisión del GPS en metros
+            <input
+              type="number"
+              min={0}
+              max={200}
+              value={accuracy}
+              onChange={(e) => setAccuracy(Number(e.target.value))}
+              style={{ width: 120 }}
+            />
+          </label>
+          {verdict && (
+            <div className="verdict" role="status">
+              <StatusBadge status={verdict.verdict} />
+              <strong>{statusLabel(verdict.geofence_result)} de la geocerca</strong>
+              {verdict.distance_m !== null && verdict.distance_m > 0 && (
+                <span className="muted">a {Math.round(verdict.distance_m)} m del borde</span>
+              )}
+              {verdict.reasons.length > 0 && <span className="muted">{verdict.reasons.map(reasonLabel).join(". ")}</span>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {(mode === "polygon" || mode === "circle") && (
+        <div className="map-controls">
+          {mode === "polygon" ? (
+            <>
+              <span className="muted num">
+                {draft.polygon.length} {draft.polygon.length === 1 ? "punto" : "puntos"}
+              </span>
+              <button
+                type="button"
+                className="secondary small"
+                disabled={draft.polygon.length === 0}
+                onClick={() => setDraft((d) => ({ ...d, polygon: d.polygon.slice(0, -1) }))}
+              >
+                Deshacer punto
+              </button>
+              <button
+                type="button"
+                className="ghost small"
+                disabled={draft.polygon.length === 0}
+                onClick={() => setDraft(EMPTY_DRAFT)}
+              >
+                Empezar de nuevo
+              </button>
+            </>
+          ) : (
+            <label style={{ flex: "1 1 260px" }}>
+              Radio: <span className="num">{draft.circle.radius} m</span>
+              <input
+                type="range"
+                min={20}
+                max={500}
+                step={5}
+                value={draft.circle.radius}
+                onChange={(e) => setDraft((d) => ({ ...d, circle: { ...d.circle, radius: Number(e.target.value) } }))}
+                style={{ padding: 0, minHeight: 0, border: 0, boxShadow: "none" }}
+              />
+            </label>
+          )}
+          <label>
+            Nombre
+            <input value={name} onChange={(e) => setName(e.target.value)} required />
+          </label>
+          <button type="button" disabled={!canSave || action.busy} onClick={save}>
+            Guardar geocerca
+          </button>
+          <button type="button" className="ghost" onClick={() => choose("view")}>
+            Cancelar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CampusCard({ campus }: { campus: Campus }) {
   const { isAdmin } = useSession();
   const geofences = useApi<Geofence[]>(`geofences?campus_id=${campus.id}`);
@@ -211,8 +425,11 @@ function CampusCard({ campus }: { campus: Campus }) {
           Esta sede no tiene ninguna geocerca activa: la asistencia registrada aquí se va a rechazar.
         </Message>
       )}
+      {geofences.data && (
+        <GeofenceMapPanel campus={campus} geofences={geofences.data} onCreated={geofences.reload} />
+      )}
       {geofences.data && geofences.data.length > 0 && (
-        <div className="table-wrap">
+        <div className="table-wrap" style={{ marginTop: 18 }}>
           <table>
             <thead>
               <tr><th>Geocerca</th><th>Área</th><th>Estado</th>{isAdmin && <th />}</tr>
@@ -242,12 +459,15 @@ function CampusCard({ campus }: { campus: Campus }) {
           En ese caso, desactívala.
         </p>
       )}
-      <AdminOnly>
-        <h3 className="subhead">Nueva geocerca</h3>
-        <GeofenceForm campus={campus} onCreated={geofences.reload} />
-      </AdminOnly>
-      <h3 className="subhead">Probar una ubicación</h3>
-      <LocationTester campus={campus} />
+      <details className="manual">
+        <summary>Ingresar coordenadas a mano</summary>
+        <AdminOnly>
+          <h3 className="subhead">Nueva geocerca</h3>
+          <GeofenceForm campus={campus} onCreated={geofences.reload} />
+        </AdminOnly>
+        <h3 className="subhead">Probar una ubicación</h3>
+        <LocationTester campus={campus} />
+      </details>
     </section>
   );
 }

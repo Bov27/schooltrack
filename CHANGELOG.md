@@ -18,6 +18,9 @@ All notable changes are listed here. The format follows
   haptic feedback, a day-grouped history and an unread badge for notices.
 
 ### Added
+- Campus map in the dashboard (Leaflet, OpenStreetMap and satellite imagery, no API key):
+  geofences drawn over the map, the latest attendance events as coloured points, a point
+  tester by clicking the map, and drawing a new geofence as a polygon or a circle.
 - `GET /api/v1/attendance/roster`: every active student with the current state and the
   last event, for school admins and teachers.
 

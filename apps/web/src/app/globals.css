@@ -335,3 +335,15 @@ td.actions > * + * { margin-left: 6px; }
 .spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--tinta); animation: spin 0.8s linear infinite; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- campus map ------------------------------------------------------------------- */
+.map-panel { margin: 8px 0 4px; }
+.map-frame { position: relative; border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--line-strong); isolation: isolate; }
+.map { width: 100%; background: #dfe5df; }
+.map-layers { position: absolute; z-index: 500; top: 12px; right: 12px; box-shadow: 0 2px 8px rgba(18, 58, 71, 0.2); background: #fff; }
+.map-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-top: 14px; }
+.leaflet-container { font-family: var(--font-body); }
+.leaflet-tooltip { font-family: var(--font-body); font-size: 13px; border-radius: var(--r-sm); }
+details.manual { margin-top: 18px; }
+details.manual > summary { cursor: pointer; color: var(--tinta-2); font-weight: 700; font-size: 14px; }
+@media (max-width: 900px) { .map { height: 320px !important; } }
