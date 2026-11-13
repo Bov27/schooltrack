@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "SchoolTrack",
+    "slug": "schooltrack",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "co.schooltrack.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "SchoolTrack usa tu ubicación solo en el momento en que registras tu asistencia, para confirmar que estás en la sede."
+      }
+    },
+    "android": {
+      "package": "co.schooltrack.app",
+      "permissions": ["ACCESS_FINE_LOCATION", "ACCESS_COARSE_LOCATION"],
+      "blockedPermissions": ["ACCESS_BACKGROUND_LOCATION"]
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SchoolTrack usa tu ubicación solo en el momento en que registras tu asistencia, para confirmar que estás en la sede.",
+          "isAndroidBackgroundLocationEnabled": false,
+          "isIosBackgroundLocationEnabled": false
+        }
+      ],
+      "expo-secure-store"
+    ]
+  }
+}

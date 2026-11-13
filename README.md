@@ -97,6 +97,7 @@ pytest --cov                            # integration tests run when DATABASE_UR
 ## Repository layout
 
 ```
+apps/mobile/             Expo app for students and staff (see apps/mobile/README.md)
 apps/web/                Next.js admin dashboard (BFF: tokens stay in httpOnly cookies)
 backend/                 FastAPI application, Alembic migrations, tests
 infrastructure/docker/   database initialisation (runtime role)
@@ -111,7 +112,8 @@ docs/
 ```
 
 `apps/web` is the Next.js admin dashboard (`cd apps/web && npm install && npm run dev`, with
-the API on port 8000). `apps/mobile` is added in Week 5b. Business modules under
+the API on port 8000). `apps/mobile` is the Expo app; see [its README](apps/mobile/README.md)
+to run it on a phone with Expo Go. Business modules under
 `backend/app/modules/` are added when they get their first feature.
 
 ## Roadmap
