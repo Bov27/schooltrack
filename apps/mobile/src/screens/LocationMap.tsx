@@ -47,6 +47,8 @@ export function LocationMap({ fix, geofences, onClose }: { fix: LastFix; geofenc
           source={{ html, baseUrl: API_URL }}
           originWhitelist={["*"]}
           scrollEnabled={false}
+          // Let the map take the finger gestures instead of the page around it.
+          nestedScrollEnabled
           style={styles.map}
           javaScriptEnabled
           setSupportMultipleWindows={false}
@@ -86,7 +88,7 @@ const styles = StyleSheet.create({
   head: { flexDirection: "row", gap: 10, alignItems: "flex-start" },
   title: { fontSize: 16, fontWeight: "800", color: colors.text },
   subtitle: { color: colors.muted, fontSize: 13, marginTop: 2 },
-  mapWrap: { height: 240, borderRadius: radius.sm, overflow: "hidden", backgroundColor: "#dfe5df" },
+  mapWrap: { height: 300, borderRadius: radius.sm, overflow: "hidden", backgroundColor: "#dfe5df" },
   map: { flex: 1, backgroundColor: "#dfe5df" },
   toggle: { position: "absolute", top: 8, right: 8, flexDirection: "row", backgroundColor: "rgba(255,255,255,0.92)", borderRadius: 999, padding: 3 },
   toggleButton: { paddingVertical: 5, paddingHorizontal: 10, borderRadius: 999 },

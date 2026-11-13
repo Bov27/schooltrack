@@ -26,5 +26,7 @@ describe("map page", () => {
     expect(html).toContain("tile.openstreetmap.org");
     expect(html).toContain("2.445");
     expect(html).not.toMatch(/<script[^>]+src=/);
+    expect(html).toContain("Acercar"); // zoom controls
+    expect(html).toContain("pointermove"); // pan and pinch
   });
 });
