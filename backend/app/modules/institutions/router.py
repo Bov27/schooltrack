@@ -17,12 +17,12 @@ from app.modules.audit.service import AuditService
 from app.modules.identity.service import IdentityService
 from app.modules.institutions.models import InstitutionRole
 from app.modules.institutions.schemas import (
+    AdminAssign,
     CampusCreate,
     CampusOut,
     GuardianCreate,
     GuardianLink,
     GuardianOut,
-    AdminAssign,
     InstitutionCreate,
     InstitutionOut,
     PlatformInstitutionOut,
