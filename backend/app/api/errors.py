@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.errors import AuthenticationError, DomainError
+from app.core.errors import AuthenticationError, DomainError, RateLimitedError
 
 
 class ErrorBody(BaseModel):
@@ -65,7 +65,11 @@ async def _http_exception_handler(request: Request, exc: Exception) -> JSONRespo
 async def _domain_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     if not isinstance(exc, DomainError):  # pragma: no cover
         raise exc
-    headers = {"WWW-Authenticate": "Bearer"} if isinstance(exc, AuthenticationError) else None
+    headers: dict[str, str] | None = None
+    if isinstance(exc, AuthenticationError):
+        headers = {"WWW-Authenticate": "Bearer"}
+    elif isinstance(exc, RateLimitedError):
+        headers = {"Retry-After": str(exc.retry_after)}
     return _response(request, exc.status_code, exc.message, headers=headers)
 
 

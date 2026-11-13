@@ -10,7 +10,7 @@ recorded in a new ADR that supersedes the old one.
 | [002](ADR-002-shared-database-multi-tenancy.md) | Shared database multi-tenancy with RLS | Accepted |
 | [003](ADR-003-postgis-geospatial-validation.md) | PostGIS geospatial validation | Accepted |
 | [004](ADR-004-attendance-state-machine.md) | Attendance event state machine | Accepted |
-| 005 | Transactional outbox | Planned (Week 6) |
+| [005](ADR-005-transactional-outbox.md) | Transactional outbox | Accepted |
 
 ## Template
 

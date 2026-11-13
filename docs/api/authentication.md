@@ -35,8 +35,8 @@ change. When the email does not exist, login still verifies against a dummy
 hash, so response timing does not reveal registered emails. Wrong password,
 unknown email and inactive account all return the same `401` message.
 
-Not yet implemented: login rate limiting (Redis, Week 6) and password reset or
-invitations (Week 5, with the admin dashboard).
+Failed logins are throttled per account and per client address (Redis, Week 6):
+`429` with `Retry-After`. Not yet implemented: password reset and invitations.
 
 ## Choosing the institution
 
@@ -76,6 +76,10 @@ bodies never carry `institution_id` (schemas use `extra="forbid"`).
 | GET | `/api/v1/attendance/state` | the student or staff member themselves |
 | POST | `/api/v1/attendance/manual-events` | School Admin (audited) |
 | POST | `/api/v1/attendance/events/{id}/review` | School Admin (audited) |
+| POST | `/api/v1/attendance/events/sync` | the student or staff member (offline batch) |
+| GET | `/api/v1/attendance/guardian/students` | guardians |
+| POST/GET | `/api/v1/guardians`, POST `/api/v1/guardians/{id}/students` | School Admin (linking audited) |
+| GET | `/api/v1/notifications`, POST `/api/v1/notifications/{id}/read` | authenticated (own) |
 
 ## Bootstrapping the first Super Admin
 

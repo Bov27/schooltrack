@@ -19,6 +19,7 @@ from app.core.errors import ConflictError, NotFoundError
 from app.infrastructure.orm import set_current_user
 from app.modules.institutions.models import (
     Campus,
+    Guardian,
     Institution,
     InstitutionMembership,
     InstitutionRole,
@@ -26,6 +27,7 @@ from app.modules.institutions.models import (
     Staff,
     StaffType,
     Student,
+    StudentGuardian,
     UserRole,
 )
 
@@ -321,3 +323,104 @@ class InstitutionService:
             )
         )
         return found is not None
+
+    # ---- guardians (tenant context already set) -----------------------------------
+    async def create_guardian(
+        self,
+        institution_id: uuid.UUID,
+        *,
+        user_id: uuid.UUID,
+        phone: str | None,
+        granted_by: uuid.UUID,
+    ) -> Guardian:
+        await self._ensure_member_with_role(
+            institution_id, user_id, InstitutionRole.GUARDIAN, granted_by
+        )
+        guardian = Guardian(institution_id=institution_id, user_id=user_id, phone=phone)
+        self.session.add(guardian)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise ConflictError("That account is already a guardian in this institution") from exc
+        await self.session.refresh(guardian)
+        await self.session.commit()
+        return guardian
+
+    async def link_guardian(
+        self,
+        institution_id: uuid.UUID,
+        *,
+        guardian_id: uuid.UUID,
+        student_id: uuid.UUID,
+        relationship: str,
+        receives_alerts: bool,
+        authorized_by: uuid.UUID,
+    ) -> StudentGuardian:
+        guardian = await self.session.scalar(
+            select(Guardian.id).where(
+                Guardian.institution_id == institution_id, Guardian.id == guardian_id
+            )
+        )
+        if guardian is None or not await self.subject_exists(
+            institution_id, Subject(SubjectKind.STUDENT, student_id)
+        ):
+            raise NotFoundError("Guardian or student not found")
+        link = StudentGuardian(
+            institution_id=institution_id,
+            student_id=student_id,
+            guardian_id=guardian_id,
+            relationship=relationship.strip(),
+            receives_alerts=receives_alerts,
+            authorized_by=authorized_by,
+        )
+        self.session.add(link)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise ConflictError("This guardian is already linked to the student") from exc
+        return link  # the caller commits, together with its audit entry
+
+    async def list_guardians(
+        self, institution_id: uuid.UUID
+    ) -> list[tuple[Guardian, list[uuid.UUID]]]:
+        guardians = list(
+            await self.session.scalars(
+                select(Guardian)
+                .where(Guardian.institution_id == institution_id)
+                .order_by(Guardian.created_at)
+            )
+        )
+        links = (
+            await self.session.execute(
+                select(StudentGuardian.guardian_id, StudentGuardian.student_id).where(
+                    StudentGuardian.institution_id == institution_id
+                )
+            )
+        ).all()
+        by_guardian: dict[uuid.UUID, list[uuid.UUID]] = {}
+        for guardian_id, student_id in links:
+            by_guardian.setdefault(guardian_id, []).append(student_id)
+        return [(g, by_guardian.get(g.id, [])) for g in guardians]
+
+    async def guarded_students(
+        self, institution_id: uuid.UUID, user_id: uuid.UUID
+    ) -> list[Student]:
+        """Students this user is an authorized guardian of, in this institution."""
+        result = await self.session.scalars(
+            select(Student)
+            .join(
+                StudentGuardian,
+                (StudentGuardian.institution_id == Student.institution_id)
+                & (StudentGuardian.student_id == Student.id),
+            )
+            .join(
+                Guardian,
+                (Guardian.institution_id == StudentGuardian.institution_id)
+                & (Guardian.id == StudentGuardian.guardian_id),
+            )
+            .where(Student.institution_id == institution_id, Guardian.user_id == user_id)
+            .order_by(Student.full_name)
+        )
+        return list(result)

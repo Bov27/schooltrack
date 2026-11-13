@@ -106,3 +106,25 @@ class StaffOut(BaseModel):
     staff_type: StaffType
     user_id: uuid.UUID
     is_active: bool
+
+
+class GuardianCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_email: str = Field(max_length=320)
+    phone: str | None = Field(default=None, max_length=30)
+
+
+class GuardianOut(BaseModel):
+    id: uuid.UUID
+    user_id: uuid.UUID
+    phone: str | None
+    student_ids: list[uuid.UUID]
+
+
+class GuardianLink(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    student_id: uuid.UUID
+    relationship: str = Field(min_length=2, max_length=50, examples=["MOTHER", "LEGAL_GUARDIAN"])
+    receives_alerts: bool = True

@@ -1,6 +1,6 @@
 import uuid
 
-from fastapi import APIRouter, status
+from fastapi import APIRouter, Request, status
 
 from app.api.deps import (
     CurrentUserDep,
@@ -13,11 +13,15 @@ from app.api.deps import (
 )
 from app.api.errors import error_responses
 from app.core.errors import NotFoundError, PermissionDeniedError
+from app.modules.audit.service import AuditService
 from app.modules.identity.service import IdentityService
 from app.modules.institutions.models import InstitutionRole
 from app.modules.institutions.schemas import (
     CampusCreate,
     CampusOut,
+    GuardianCreate,
+    GuardianLink,
+    GuardianOut,
     InstitutionCreate,
     InstitutionOut,
     StaffCreate,
@@ -161,3 +165,68 @@ async def create_staff(
 async def list_staff(tenant: SchoolAdminDep, session: SessionDep) -> list[StaffOut]:
     members = await InstitutionService(session).list_staff(tenant.institution_id)
     return [StaffOut.model_validate(m) for m in members]
+
+
+@router.post(
+    "/guardians",
+    response_model=GuardianOut,
+    status_code=status.HTTP_201_CREATED,
+    responses=error_responses(401, 403, 404, 409),
+    tags=["guardians"],
+)
+async def create_guardian(
+    body: GuardianCreate, tenant: SchoolAdminDep, session: SessionDep, settings: SettingsDep
+) -> GuardianOut:
+    """Register an existing account as a guardian (adds the GUARDIAN role)."""
+    user_id = await _user_id_for(body.user_email, session, settings)
+    guardian = await InstitutionService(session).create_guardian(
+        tenant.institution_id, user_id=user_id, phone=body.phone, granted_by=tenant.user_id
+    )
+    return GuardianOut(
+        id=guardian.id, user_id=guardian.user_id, phone=guardian.phone, student_ids=[]
+    )
+
+
+@router.get("/guardians", response_model=list[GuardianOut], responses=_errors, tags=["guardians"])
+async def list_guardians(tenant: SchoolAdminDep, session: SessionDep) -> list[GuardianOut]:
+    rows = await InstitutionService(session).list_guardians(tenant.institution_id)
+    return [
+        GuardianOut(id=g.id, user_id=g.user_id, phone=g.phone, student_ids=students)
+        for g, students in rows
+    ]
+
+
+@router.post(
+    "/guardians/{guardian_id}/students",
+    status_code=status.HTTP_201_CREATED,
+    responses=error_responses(401, 403, 404, 409),
+    tags=["guardians"],
+)
+async def link_guardian(
+    guardian_id: uuid.UUID,
+    body: GuardianLink,
+    request: Request,
+    tenant: SchoolAdminDep,
+    session: SessionDep,
+) -> dict[str, str]:
+    """Authorize a guardian to follow a student's attendance. The authorization (who,
+    when) is stored and audited, as required for minors' data."""
+    await InstitutionService(session).link_guardian(
+        tenant.institution_id,
+        guardian_id=guardian_id,
+        student_id=body.student_id,
+        relationship=body.relationship,
+        receives_alerts=body.receives_alerts,
+        authorized_by=tenant.user_id,
+    )
+    await AuditService(session).record(
+        institution_id=tenant.institution_id,
+        actor_user_id=tenant.user_id,
+        action="guardian.linked",
+        entity_type="student_guardian",
+        entity_id=f"{guardian_id}:{body.student_id}",
+        changes=body.model_dump(mode="json"),
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await session.commit()
+    return {"guardian_id": str(guardian_id), "student_id": str(body.student_id)}

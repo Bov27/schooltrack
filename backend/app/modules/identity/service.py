@@ -122,6 +122,7 @@ class IdentityService:
         platform: DevicePlatform,
         model: str | None,
         app_version: str | None,
+        push_token: str | None = None,
     ) -> Device:
         """Idempotent per (user, installation): re-registering updates the metadata.
         A revoked device stays revoked; only an administrator could restore it."""
@@ -134,11 +135,17 @@ class IdentityService:
                 platform=platform,
                 model=model,
                 app_version=app_version,
+                push_token=push_token,
                 last_seen_at=now,
             )
             .on_conflict_do_update(
                 index_elements=["user_id", "installation_id"],
-                set_={"model": model, "app_version": app_version, "last_seen_at": now},
+                set_={
+                    "model": model,
+                    "app_version": app_version,
+                    "push_token": push_token,
+                    "last_seen_at": now,
+                },
             )
         )
         device = await self.session.scalar(

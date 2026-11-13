@@ -287,6 +287,18 @@ class AttendanceRepository:
         ).all()
         return [dict(r._mapping) for r in rows]
 
+    async def event_occurred_at(
+        self, institution_id: uuid.UUID, event_id: uuid.UUID
+    ) -> datetime | None:
+        value: datetime | None = await self.session.scalar(
+            text(
+                "SELECT occurred_at FROM attendance_events "
+                "WHERE institution_id = :inst AND id = :id"
+            ),
+            {"inst": institution_id, "id": event_id},
+        )
+        return value
+
     async def current_state(
         self, institution_id: uuid.UUID, subject: Subject
     ) -> LockedState:

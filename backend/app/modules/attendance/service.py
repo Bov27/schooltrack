@@ -16,14 +16,15 @@ import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import ConflictError, DomainError, NotFoundError, PermissionDeniedError
-from app.infrastructure.orm import set_current_institution
+from app.infrastructure.orm import set_current_institution, set_current_user
+from app.infrastructure.outbox import enqueue
 from app.modules.attendance.repository import AttendanceRepository, NewEvent
 from app.modules.attendance.schemas import (
     AttendanceEventCreate,
@@ -51,6 +52,15 @@ class RequestRejectedError(DomainError):
 
 class TransitionConflictError(ConflictError):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class BatchItemResult:
+    idempotency_key: uuid.UUID
+    outcome: Literal["created", "replayed", "error"]
+    status_code: int
+    event: dict[str, Any] | None = None
+    error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,13 +93,22 @@ class AttendanceService:
         body: AttendanceEventCreate,
         *,
         now: datetime | None = None,
+        offline: bool = False,
     ) -> RecordResult:
+        """offline=True: an event captured without connectivity and synchronized later.
+        Its age is checked against the offline window, location rules are evaluated at
+        the moment it happened, and it may not predate the person's last event."""
         now = now or datetime.now(UTC)
         existing = await self.repo.find_by_key(institution_id, user_id, body.idempotency_key)
         if existing is not None:
             return self._replay(existing, body.event_type, body.campus_id)
 
-        self._check_request_age(body.occurred_at, now)
+        if offline:
+            self._check_offline_age(body.occurred_at, now)
+            rules_now = body.occurred_at
+        else:
+            self._check_request_age(body.occurred_at, now)
+            rules_now = now
         subject = await self._own_subject(institution_id, user_id, body.as_subject)
         if body.device_id is not None:
             device = await IdentityService(self.session, self.settings).active_device(
@@ -100,7 +119,7 @@ class AttendanceService:
 
         async def assess(state_before: AttendanceState) -> _Assessment:
             del state_before
-            return await self._assess_location(institution_id, subject, body, now)
+            return await self._assess_location(institution_id, subject, body, rules_now)
 
         return await self._record(
             institution_id=institution_id,
@@ -110,14 +129,53 @@ class AttendanceService:
             campus_id=body.campus_id,
             idempotency_key=body.idempotency_key,
             occurred_at=body.occurred_at,
-            source="MOBILE_GPS",
+            source="OFFLINE_SYNC" if offline else "MOBILE_GPS",
             device_id=body.device_id,
             location=(body.latitude, body.longitude, body.accuracy_m),
             location_captured_at=body.location_captured_at,
             is_mock=body.is_mock,
             manual_reason=None,
             assess=assess,
+            not_before_last_event=offline,
         )
+
+    async def sync_offline(
+        self,
+        institution_id: uuid.UUID,
+        user_id: uuid.UUID,
+        items: list[AttendanceEventCreate],
+        *,
+        now: datetime | None = None,
+    ) -> list[BatchItemResult]:
+        """Replay events queued on the phone while offline, oldest first. Each item is
+        its own transaction, so one refused item does not discard the others; a retry
+        of the whole batch is safe thanks to the idempotency keys."""
+        results: list[BatchItemResult] = []
+        for item in sorted(items, key=lambda i: i.occurred_at):
+            # Every commit/rollback clears the transaction-local tenant context.
+            await set_current_user(self.session, user_id)
+            await set_current_institution(self.session, institution_id)
+            try:
+                result = await self.record_own(
+                    institution_id, user_id, item, now=now, offline=True
+                )
+            except DomainError as exc:
+                await self.session.rollback()
+                results.append(
+                    BatchItemResult(
+                        item.idempotency_key, "error", exc.status_code, error=exc.message
+                    )
+                )
+                continue
+            results.append(
+                BatchItemResult(
+                    item.idempotency_key,
+                    "created" if result.created else "replayed",
+                    201 if result.created else 200,
+                    event=result.event,
+                )
+            )
+        return results
 
     # ---- manual events (School Admin) -------------------------------------------------
     async def record_manual(
@@ -211,6 +269,16 @@ class AttendanceService:
     ) -> list[Subject]:
         return await self.institutions.subjects_for_user(institution_id, user_id)
 
+    async def visible_subjects(
+        self, institution_id: uuid.UUID, user_id: uuid.UUID
+    ) -> list[Subject]:
+        """Whose attendance a non-admin may read: their own, plus the students they are
+        an authorized guardian of."""
+        subjects = await self.own_subjects(institution_id, user_id)
+        for student in await self.institutions.guarded_students(institution_id, user_id):
+            subjects.append(Subject(SubjectKind.STUDENT, student.id))
+        return subjects
+
     async def list_events(
         self,
         institution_id: uuid.UUID,
@@ -237,7 +305,9 @@ class AttendanceService:
             if restrict_to is not None and not (
                 set(wanted_students) <= allowed_students and set(wanted_staff) <= allowed_staff
             ):
-                raise PermissionDeniedError("You can only see your own attendance")
+                raise PermissionDeniedError(
+                    "You can only see your own attendance or that of students in your care"
+                )
             students, staff = wanted_students, wanted_staff
         return await self.repo.list_events(
             institution_id,
@@ -278,6 +348,7 @@ class AttendanceService:
         manual_reason: str | None,
         assess: Callable[[AttendanceState], Awaitable["_Assessment"]],
         audit_request_id: str | None = None,
+        not_before_last_event: bool = False,
     ) -> RecordResult:
         locked = await self.repo.lock_state(institution_id, subject)
 
@@ -286,6 +357,15 @@ class AttendanceService:
         if existing is not None:
             await self.session.rollback()
             return self._replay(existing, event_type, campus_id)
+
+        if not_before_last_event and locked.last_event_id is not None:
+            last_at = await self.repo.event_occurred_at(institution_id, locked.last_event_id)
+            if last_at is not None and occurred_at < last_at:
+                await self.session.rollback()
+                raise TransitionConflictError(
+                    "This offline event is older than the latest recorded event "
+                    f"({last_at.isoformat()}); it cannot be applied out of order"
+                )
 
         try:
             target = next_state(locked.state, event_type)
@@ -336,6 +416,23 @@ class AttendanceService:
 
         if accepted:
             await self.repo.update_state(institution_id, subject, target, event["id"])
+            if subject.kind is SubjectKind.STUDENT:
+                # Guardian notifications, delivered by the worker (ADR-005). Same
+                # transaction: no event without its message, no message without its event.
+                await enqueue(
+                    self.session,
+                    institution_id,
+                    "attendance.event_recorded",
+                    {
+                        "event_id": str(event["id"]),
+                        "student_id": str(subject.id),
+                        "event_type": event_type.value,
+                        "state_after": target.value,
+                        "validation_status": assessment.status,
+                        "occurred_at": occurred_at.isoformat(),
+                        "campus_id": str(campus_id),
+                    },
+                )
         if source == "MANUAL":
             await AuditService(self.session).record(
                 institution_id=institution_id,
@@ -408,6 +505,16 @@ class AttendanceService:
         if len(subjects) > 1:
             raise DomainError("Your account is both a student and staff: send 'as_subject'")
         return subjects[0]
+
+    def _check_offline_age(self, occurred_at: datetime, now: datetime) -> None:
+        age_h = (now - occurred_at).total_seconds() / 3600
+        if age_h > self.settings.offline_max_age_h:
+            raise RequestRejectedError(
+                f"Offline events can be synchronized for {self.settings.offline_max_age_h:.0f} h; "
+                "this one is older"
+            )
+        if (occurred_at - now).total_seconds() > self.settings.clock_skew_tolerance_s:
+            raise RequestRejectedError("Event timestamp is in the future; check the device clock")
 
     def _check_request_age(self, occurred_at: datetime, now: datetime) -> None:
         age = (now - occurred_at).total_seconds()
