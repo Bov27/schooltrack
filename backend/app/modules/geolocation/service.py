@@ -9,9 +9,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import ConflictError, DomainError, NotFoundError
+from app.modules.audit.service import AuditService
 from app.modules.geolocation.repository import GeofenceRepository
 from app.modules.geolocation.rules import GeoRules, LocationVerdict, evaluate_location
-from app.modules.audit.service import AuditService
 from app.modules.geolocation.schemas import GeofenceCreate, GeofenceUpdate, LocationCheck
 
 
