@@ -164,8 +164,8 @@ class IdentityService:
                 Device.user_id == user_id,
                 Device.status == DeviceStatus.ACTIVE,
             )
-        return device
         )
+        return device
 
     async def _issue_pair(
         self, user_id: uuid.UUID, *, family_id: uuid.UUID, replaces: RefreshToken | None = None
