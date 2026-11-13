@@ -1,0 +1,20 @@
+name: tmp-lockfile
+on:
+  push:
+    branches: [lockfile-tmp3]
+permissions:
+  contents: read
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: npm ci
+      - run: npm install leaflet@~1.9.4 && npm install --save-dev @types/leaflet@~1.9.12
+      - run: cat package.json
+      - run: gzip -9c package-lock.json | base64 -w0 > lock.b64 && echo "LOCKSTART" && cat lock.b64 && echo && echo "LOCKEND"
