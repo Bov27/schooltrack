@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.db_support import Factory, auth, login, requires_database
+from tests.db_support import DEFAULT_PASSWORD, Factory, auth, login, requires_database
 
 pytestmark = [requires_database]
 NEW_PASSWORD = "otra-clave-segura-2027"
@@ -32,7 +32,7 @@ def school(factory: Factory) -> School:
 
 # ---- accounts -----------------------------------------------------------------------
 
-def create_account(api: TestClient, email: str, password: str = "clave-inicial-2027") -> Any:
+def create_account(api: TestClient, email: str, password: str = DEFAULT_PASSWORD) -> Any:
     return api.post(
         "/api/v1/accounts",
         json={"email": email, "full_name": "Pepito Pérez", "initial_password": password},
@@ -46,7 +46,7 @@ def test_admin_creates_an_account_that_can_log_in(
     response = create_account(api, "Pepito@Colegio-A.test")
     assert response.status_code == 201, response.text
     assert response.json()["email"] == "pepito@colegio-a.test"
-    login(api, "pepito@colegio-a.test", "clave-inicial-2027")
+    login(api, "pepito@colegio-a.test", DEFAULT_PASSWORD)
     audit = owner_conn.execute(
         "SELECT action FROM audit_logs WHERE action = 'account.created'"
     ).fetchall()
@@ -70,7 +70,7 @@ def test_teachers_cannot_create_accounts(api: TestClient, school: School) -> Non
 
 def test_changing_the_password_signs_out_every_session(api: TestClient, school: School) -> None:
     create_account(api, "pepito@colegio-a.test")
-    session = login(api, "pepito@colegio-a.test", "clave-inicial-2027")
+    session = login(api, "pepito@colegio-a.test", DEFAULT_PASSWORD)
     headers = {"Authorization": f"Bearer {session['access_token']}"}
 
     wrong = api.post(
@@ -82,7 +82,7 @@ def test_changing_the_password_signs_out_every_session(api: TestClient, school: 
 
     changed = api.post(
         "/api/v1/users/me/password",
-        json={"current_password": "clave-inicial-2027", "new_password": NEW_PASSWORD},
+        json={"current_password": DEFAULT_PASSWORD, "new_password": NEW_PASSWORD},
         headers=headers,
     )
     assert changed.status_code == 204

@@ -29,7 +29,8 @@ class AttendanceReport:
         possible = self.school_days * len(self.students)
         if possible == 0:
             return None
-        return round(sum(s["days_present"] for s in self.students) / possible, 4)
+        present: int = sum(int(s["days_present"]) for s in self.students)
+        return round(present / possible, 4)
 
 
 class AnalyticsService:
