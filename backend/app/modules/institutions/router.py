@@ -156,7 +156,10 @@ async def create_campus(
 async def _user_id_for(email: str, session: SessionDep, settings: SettingsDep) -> uuid.UUID:
     user_id = await IdentityService(session, settings).find_user_id_by_email(email)
     if user_id is None:
-        raise NotFoundError("No active user with that email")
+        raise NotFoundError(
+            f"There is no active account for {email}. Create it first under "
+            "'Create an app account' on this page, then register the person again."
+        )
     return user_id
 
 
