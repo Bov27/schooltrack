@@ -122,6 +122,7 @@ async def run_phase(
     name: str,
     requests: list[tuple[dict[str, str], str, uuid.UUID, str]],
     concurrency: int,
+    rate: float | None = None,
 ) -> Phase:
     """requests: (headers, event_type, campus_id, idempotency_key). Bodies are built at send
     time so that occurred_at is fresh (the API refuses requests older than 15 s)."""
