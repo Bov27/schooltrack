@@ -1,0 +1,21 @@
+name: tmp-lockfile
+on:
+  push:
+    branches: [lockfile-tmp2]
+permissions:
+  contents: read
+jobs:
+  lock:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: npm ci
+      - run: npx expo install @expo/vector-icons expo-haptics react-native-safe-area-context
+      - run: npx expo install --check
+      - run: cat package.json
+      - run: gzip -9c package-lock.json | base64 -w0 > lock.b64 && echo "LOCKSTART" && cat lock.b64 && echo && echo "LOCKEND"
