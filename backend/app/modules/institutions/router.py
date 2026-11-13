@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, status
 
 from app.api.deps import (
@@ -23,6 +25,10 @@ from app.modules.institutions.schemas import (
 from app.modules.institutions.service import InstitutionService
 
 router = APIRouter()
+
+SchoolAdminDep = Annotated[
+    TenantContext, Depends(require_roles(InstitutionRole.SCHOOL_ADMIN))
+]
 
 _errors = {
     401: {"model": ErrorResponse},
@@ -85,7 +91,7 @@ async def list_campuses(tenant: TenantDep, session: SessionDep) -> list[CampusOu
 async def create_campus(
     body: CampusCreate,
     session: SessionDep,
-    tenant: TenantContext = Depends(require_roles(InstitutionRole.SCHOOL_ADMIN)),
+    tenant: SchoolAdminDep,
 ) -> CampusOut:
     campus = await InstitutionService(session).create_campus(
         tenant.institution_id, name=body.name, address=body.address, timezone=body.timezone

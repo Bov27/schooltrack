@@ -4,8 +4,8 @@ from app.api.deps import CurrentUserDep, SessionDep, SettingsDep
 from app.api.errors import ErrorResponse
 from app.modules.identity.schemas import (
     LoginRequest,
-    MeResponse,
     MembershipOut,
+    MeResponse,
     RefreshRequest,
     TokenResponse,
 )

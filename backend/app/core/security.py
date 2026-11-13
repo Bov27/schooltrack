@@ -63,7 +63,7 @@ def create_token(
     if ttl is None:
         ttl = (
             timedelta(minutes=settings.access_token_ttl_minutes)
-            if token_type == "access"
+            if token_type == "access"  # noqa: S105 - token kind, not a secret
             else timedelta(days=settings.refresh_token_ttl_days)
         )
     claims = TokenClaims(

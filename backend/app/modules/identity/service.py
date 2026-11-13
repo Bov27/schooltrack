@@ -107,9 +107,15 @@ class IdentityService:
     async def _issue_pair(
         self, user_id: uuid.UUID, *, family_id: uuid.UUID, replaces: RefreshToken | None = None
     ) -> TokenPair:
-        access, access_claims = create_token(self.settings, subject=user_id, token_type="access")
+        # token_type is the token kind, not a secret (S106 false positive).
+        access, access_claims = create_token(
+            self.settings, subject=user_id, token_type="access"  # noqa: S106
+        )
         refresh, refresh_claims = create_token(
-            self.settings, subject=user_id, token_type="refresh", family_id=family_id
+            self.settings,
+            subject=user_id,
+            token_type="refresh",  # noqa: S106
+            family_id=family_id,
         )
         self.session.add(
             RefreshToken(

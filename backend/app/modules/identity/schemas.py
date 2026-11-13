@@ -28,7 +28,7 @@ class RefreshRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
-    token_type: Literal["bearer"] = "bearer"
+    token_type: Literal["bearer"] = "bearer"  # noqa: S105 - OAuth2 token kind
     expires_in: int = Field(description="Access token lifetime in seconds")
 
 
