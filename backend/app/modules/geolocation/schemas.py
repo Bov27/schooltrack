@@ -58,6 +58,13 @@ class GeofenceCreate(BaseModel):
         return self
 
 
+class GeofenceUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    is_active: bool | None = None
+
+
 class GeofenceOut(BaseModel):
     id: uuid.UUID
     campus_id: uuid.UUID

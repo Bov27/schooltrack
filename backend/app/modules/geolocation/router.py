@@ -1,13 +1,14 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Request, status
 
 from app.api.deps import SchoolAdminDep, SessionDep, SettingsDep, TenantDep
 from app.api.errors import error_responses
 from app.modules.geolocation.schemas import (
     GeofenceCreate,
     GeofenceOut,
+    GeofenceUpdate,
     LocationCheck,
     LocationVerdictOut,
 )
@@ -31,6 +32,50 @@ async def create_geofence(
         tenant.institution_id, body, tenant.user_id
     )
     return GeofenceOut(**geofence)
+
+
+@router.patch(
+    "/{geofence_id}", response_model=GeofenceOut, responses=error_responses(401, 403, 404, 409)
+)
+async def update_geofence(
+    geofence_id: uuid.UUID,
+    body: GeofenceUpdate,
+    request: Request,
+    tenant: SchoolAdminDep,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> GeofenceOut:
+    """Rename, activate or deactivate. Inactive geofences are ignored by validation but
+    kept, so past events still point at the area that validated them. Audited."""
+    geofence = await GeolocationService(session, settings).update_geofence(
+        tenant.institution_id,
+        geofence_id,
+        body,
+        tenant.user_id,
+        getattr(request.state, "request_id", None),
+    )
+    return GeofenceOut(**geofence)
+
+
+@router.delete(
+    "/{geofence_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=error_responses(401, 403, 404, 409),
+)
+async def delete_geofence(
+    geofence_id: uuid.UUID,
+    request: Request,
+    tenant: SchoolAdminDep,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> None:
+    """Delete a geofence that never validated an event (409 otherwise: deactivate it)."""
+    await GeolocationService(session, settings).delete_geofence(
+        tenant.institution_id,
+        geofence_id,
+        tenant.user_id,
+        getattr(request.state, "request_id", None),
+    )
 
 
 @router.get("", response_model=list[GeofenceOut], responses=error_responses(401, 403))

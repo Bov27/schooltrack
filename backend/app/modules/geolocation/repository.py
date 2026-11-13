@@ -140,6 +140,48 @@ class GeofenceRepository:
         ).all()
         return [_row_to_dict(r) for r in rows]
 
+    async def get(self, institution_id: uuid.UUID, geofence_id: uuid.UUID) -> dict[str, Any] | None:
+        row = (
+            await self.session.execute(
+                text(
+                    f"SELECT {_RETURNING} FROM geofences "
+                    "WHERE institution_id = :inst AND id = :id FOR UPDATE"
+                ),
+                {"inst": institution_id, "id": geofence_id},
+            )
+        ).one_or_none()
+        return None if row is None else _row_to_dict(row)
+
+    async def update(
+        self, institution_id: uuid.UUID, geofence_id: uuid.UUID, *, name: str, is_active: bool
+    ) -> dict[str, Any]:
+        row = (
+            await self.session.execute(
+                text(
+                    "UPDATE geofences SET name = :name, is_active = :active "
+                    f"WHERE institution_id = :inst AND id = :id RETURNING {_RETURNING}"
+                ),
+                {"inst": institution_id, "id": geofence_id, "name": name, "active": is_active},
+            )
+        ).one()
+        return _row_to_dict(row)
+
+    async def usage_count(self, institution_id: uuid.UUID, geofence_id: uuid.UUID) -> int:
+        count = await self.session.scalar(
+            text(
+                "SELECT count(*) FROM attendance_events "
+                "WHERE institution_id = :inst AND geofence_id = :id"
+            ),
+            {"inst": institution_id, "id": geofence_id},
+        )
+        return int(count or 0)
+
+    async def delete(self, institution_id: uuid.UUID, geofence_id: uuid.UUID) -> None:
+        await self.session.execute(
+            text("DELETE FROM geofences WHERE institution_id = :inst AND id = :id"),
+            {"inst": institution_id, "id": geofence_id},
+        )
+
     async def nearest_active(
         self, institution_id: uuid.UUID, campus_id: uuid.UUID, lat: float, lng: float
     ) -> GeofenceMatch | None:
