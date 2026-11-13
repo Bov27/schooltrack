@@ -65,6 +65,9 @@ bodies never carry `institution_id` (schemas use `extra="forbid"`).
 | POST | `/api/v1/institutions` | Super Admin (platform connection) |
 | GET | `/api/v1/campuses` | any active member |
 | POST | `/api/v1/campuses` | School Admin |
+| POST | `/api/v1/geofences` | School Admin (Week 3) |
+| GET | `/api/v1/geofences` | any active member (Week 3) |
+| POST | `/api/v1/geofences/check` | any active member, dry run (Week 3) |
 
 ## Bootstrapping the first Super Admin
 
