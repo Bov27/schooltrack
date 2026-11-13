@@ -5,6 +5,7 @@ import { ActivityIndicator, Animated, Easing, RefreshControl, ScrollView, StyleS
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { EVENT_LABELS, type EventType, STATE_LABELS, splitActions } from "../core/attendance";
+import { LocationMap } from "./LocationMap";
 import { colors, radius, stateTheme, typography } from "./theme";
 import { Banner, type IconName, PressableScale, SectionTitle, initials, isToday, timeOf } from "./ui";
 import type { AppData } from "./useAppData";
@@ -198,8 +199,27 @@ export function HomeTab({ data }: { data: AppData }) {
                 Tu ubicación se consulta solo al tocar el botón. SchoolTrack no te rastrea.
               </Text>
             </View>
+            {!data.lastFix ? (
+              <PressableScale
+                accessibilityRole="button"
+                disabled={data.locating || busy !== null}
+                onPress={() => void data.locateMe()}
+                style={styles.locate}
+              >
+                {data.locating ? (
+                  <ActivityIndicator color={colors.tinta2} />
+                ) : (
+                  <Ionicons name="map-outline" size={18} color={colors.tinta2} />
+                )}
+                <Text style={styles.locateText}>
+                  {data.locating ? "Buscando tu ubicación…" : "Ver dónde estoy en el mapa"}
+                </Text>
+              </PressableScale>
+            ) : null}
           </>
         ) : null}
+
+        {data.lastFix ? <LocationMap fix={data.lastFix} geofences={data.geofences} onClose={data.clearFix} /> : null}
 
         {data.outcome ? (
           <Banner
@@ -308,6 +328,8 @@ const styles = StyleSheet.create({
   secondaryText: { color: colors.tinta, fontWeight: "800", fontSize: 15 },
   privacy: { flexDirection: "row", gap: 6, alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
   privacyText: { color: colors.muted, fontSize: 13, flexShrink: 1, textAlign: "center" },
+  locate: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingVertical: 8 },
+  locateText: { color: colors.tinta2, fontWeight: "800", fontSize: 15 },
   child: {
     flexDirection: "row",
     alignItems: "center",

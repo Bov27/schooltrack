@@ -21,6 +21,13 @@ All notable changes are listed here. The format follows
 - Campus map in the dashboard (Leaflet, OpenStreetMap and satellite imagery, no API key):
   geofences drawn over the map, the latest attendance events as coloured points, a point
   tester by clicking the map, and drawing a new geofence as a polygon or a circle.
+- Records page: each event opens on the campus map with the GPS accuracy circle.
+- Analytics: staff tab (teachers and other staff, School Admins only) and a per-person
+  calendar of school days (attended, absent, under review, rejected attempt), backed by
+  `GET /api/v1/analytics/staff` and `GET /api/v1/analytics/person`.
+- Mobile app: after recording, or with "Ver dónde estoy en el mapa", the person sees
+  their point and GPS accuracy over the campus geofence (satellite or street view). The
+  map is a small self-contained page in a WebView; it loads no external script.
 - `GET /api/v1/attendance/roster`: every active student with the current state and the
   last event, for school admins and teachers.
 

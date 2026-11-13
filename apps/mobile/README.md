@@ -31,6 +31,9 @@ Sign in with an account that is linked to a student or staff record (register on
   *Avisos* and *Perfil* (institution, password, sign out). `src/screens/useAppData.ts` holds the data and
   actions they share. Icons come from `@expo/vector-icons`, insets from `react-native-safe-area-context`
   and tap feedback from `expo-haptics`, all included in Expo Go.
+- **Map.** `src/core/mapHtml.ts` builds a self-contained page (tiles plus an SVG overlay, no external script)
+  shown in `react-native-webview`. The location shown is the one the phone just read; it is kept in memory
+  only. The server still never echoes coordinates to students or guardians.
 - `src/core` is platform-independent and unit-tested with vitest; `src/platform` adapts it to Expo APIs.
 - **Offline queue.** If an event cannot reach the server after the retries, it is saved in the OS keystore
   (one entry per event, at most 40) with its original time, location and idempotency key. The screen shows

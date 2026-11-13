@@ -32,6 +32,7 @@ def school(factory: Factory) -> School:
 
 # ---- accounts -----------------------------------------------------------------------
 
+
 def create_account(api: TestClient, email: str, password: str = DEFAULT_PASSWORD) -> Any:
     return api.post(
         "/api/v1/accounts",
@@ -93,6 +94,7 @@ def test_changing_the_password_signs_out_every_session(api: TestClient, school: 
 
 # ---- linking accounts to existing students -----------------------------------------
 
+
 def test_link_an_account_to_an_existing_student(api: TestClient, school: School) -> None:
     create_account(api, "pepito@colegio-a.test")
     admin = auth(api, "admin@colegio-a.test")
@@ -147,9 +149,8 @@ def test_rename_and_deactivate_are_audited(
 
 # ---- analytics ------------------------------------------------------------------------
 
-def add_check_in(
-    owner_conn: Any, school: School, student: uuid.UUID, at: str, status: str
-) -> None:
+
+def add_check_in(owner_conn: Any, school: School, student: uuid.UUID, at: str, status: str) -> None:
     actor = owner_conn.execute("SELECT id FROM users LIMIT 1").fetchone()[0]
     owner_conn.execute(
         """
@@ -173,7 +174,7 @@ def week(school: School, owner_conn: Any, factory: Factory) -> School:
     add_check_in(owner_conn, school, school.pepito, "2026-11-12 08:00-05", "REJECTED")
     add_check_in(owner_conn, school, school.pepito, "2026-11-13 23:30-05", "VALIDATED")
     add_check_in(owner_conn, school, school.pepito, "2026-11-14 09:00-05", "VALIDATED")
-    factory.student(school.inst, "125", name="=HYPERLINK(\"http://evil\")")
+    factory.student(school.inst, "125", name='=HYPERLINK("http://evil")')
     return school
 
 
@@ -233,3 +234,93 @@ def test_analytics_permissions_and_validation(api: TestClient, school: School) -
         headers=auth(api, "admin@colegio-a.test"),
     )
     assert backwards.status_code == 400
+
+
+def add_staff_event(owner_conn: Any, school: School, staff: uuid.UUID, kind: str, at: str) -> None:
+    before, after = ("OUTSIDE", "PRESENT") if kind == "CHECK_IN" else ("PRESENT", "OUTSIDE")
+    actor = owner_conn.execute("SELECT id FROM users LIMIT 1").fetchone()[0]
+    owner_conn.execute(
+        """
+        INSERT INTO attendance_events (institution_id, campus_id, staff_id, actor_user_id,
+            event_type, source, state_before, state_after, occurred_at, location,
+            idempotency_key, validation_status)
+        VALUES (%s, %s, %s, %s, %s, 'MOBILE_GPS', %s, %s, %s,
+            ST_GeogFromText('SRID=4326;POINT(-76.6063 2.4419)'), gen_random_uuid(), 'VALIDATED')
+        """,
+        (school.inst, school.campus, staff, actor, kind, before, after, at),
+    )
+
+
+@pytest.fixture
+def staffed(week: School, owner_conn: Any, factory: Factory) -> uuid.UUID:
+    """Laura teaches; she comes Mon and Tue (7:00-13:00 and 6:30-12:00)."""
+    laura = factory.staff(
+        week.inst, "DOC-1", factory.user("laura@colegio-a.test", name="Laura Docente")
+    )
+    add_staff_event(owner_conn, week, laura, "CHECK_IN", "2026-11-09 07:00-05")
+    add_staff_event(owner_conn, week, laura, "CHECK_OUT", "2026-11-09 13:00-05")
+    add_staff_event(owner_conn, week, laura, "CHECK_IN", "2026-11-10 06:30-05")
+    add_staff_event(owner_conn, week, laura, "CHECK_OUT", "2026-11-10 12:00-05")
+    return laura
+
+
+def test_staff_report_is_for_admins(api: TestClient, staffed: uuid.UUID) -> None:
+    response = api.get(
+        "/api/v1/analytics/staff", params=RANGE, headers=auth(api, "admin@colegio-a.test")
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    laura = next(s for s in body["staff"] if s["employee_code"] == "DOC-1")
+    assert laura["full_name"] == "Laura Docente"
+    assert (laura["days_present"], laura["school_days"]) == (2, 5)
+    assert laura["average_first_check_in"] == "06:45"
+    assert laura["average_last_check_out"] == "12:30"
+    assert [d["present"] for d in body["days"]] == [1, 1, 0, 0, 0]
+
+    teacher = api.get(
+        "/api/v1/analytics/staff", params=RANGE, headers=auth(api, "teacher@colegio-a.test")
+    )
+    assert teacher.status_code == 403
+
+
+def test_one_students_days(api: TestClient, week: School) -> None:
+    response = api.get(
+        "/api/v1/analytics/person",
+        params={**RANGE, "student_id": str(week.pepito)},
+        headers=auth(api, "teacher@colegio-a.test"),
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["full_name"] == "Pepito Pérez"
+    assert (body["days_present"], body["school_days"]) == (3, 5)
+    assert [d["present"] for d in body["days"]] == [False, True, True, False, True]
+    assert body["days"][1]["first_check_in"] == "07:00"
+    assert body["days"][3]["rejected_events"] == 1  # rejected attempt on Thursday
+    assert body["days"][2]["flagged_events"] == 1
+
+
+def test_one_staff_members_days_and_validation(
+    api: TestClient, staffed: uuid.UUID, week: School
+) -> None:
+    admin = auth(api, "admin@colegio-a.test")
+    response = api.get(
+        "/api/v1/analytics/person", params={**RANGE, "staff_id": str(staffed)}, headers=admin
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["days"][0]["last_check_out"] == "13:00"
+
+    teacher = auth(api, "teacher@colegio-a.test")
+    hidden = api.get(
+        "/api/v1/analytics/person", params={**RANGE, "staff_id": str(staffed)}, headers=teacher
+    )
+    assert hidden.status_code == 403
+    both = api.get(
+        "/api/v1/analytics/person",
+        params={**RANGE, "staff_id": str(staffed), "student_id": str(week.pepito)},
+        headers=admin,
+    )
+    assert both.status_code == 400
+    unknown = api.get(
+        "/api/v1/analytics/person", params={**RANGE, "student_id": str(uuid.uuid4())}, headers=admin
+    )
+    assert unknown.status_code == 404

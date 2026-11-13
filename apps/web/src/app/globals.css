@@ -358,3 +358,32 @@ tr.detail > td { padding: 4px 10px 22px; background: #fafbf9; }
 .event-facts dt { color: var(--muted); }
 .event-facts dd { margin: 0; }
 @media (max-width: 900px) { .event-map { grid-template-columns: 1fr; } }
+
+/* ---- one person's days (Analíticas) ----------------------------------------------- */
+.person-detail { border-color: var(--tinta-2); animation: fade 0.2s both; scroll-margin-top: 20px; }
+.person-detail .person .avatar { width: 44px; height: 44px; font-size: 15px; background: var(--tinta); color: #fff; }
+.calendar { display: flex; flex-direction: column; gap: 8px; }
+.calendar-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+.calendar-head span { font-size: 13px; font-weight: 700; color: var(--muted); padding-left: 4px; }
+.calendar-day {
+  display: flex; flex-direction: column; gap: 2px; min-height: 86px;
+  padding: 10px 12px; border-radius: var(--r-md); border: 1px solid var(--line);
+  background: #fff; font-size: 13px;
+}
+.calendar-day.empty { background: transparent; border-style: dashed; }
+.calendar-date { font-family: var(--font-display); font-weight: 700; font-size: 20px; line-height: 1; color: var(--tinta); }
+.calendar-state { font-weight: 700; }
+.calendar-times { color: inherit; opacity: 0.85; }
+.calendar-note { font-size: 12px; font-weight: 700; }
+.calendar-day.present { background: var(--pizarra); border-color: var(--pizarra); color: #fff; }
+.calendar-day.present .calendar-date { color: #fff; }
+.calendar-day.flagged { background: var(--pupitre-bg); border-color: var(--pupitre); color: #6b4e00; }
+.calendar-day.absent { background: #fbeeec; border-color: #f3c9c4; color: var(--lacre); }
+.calendar-day.rejected { background: var(--lacre); border-color: var(--lacre); color: #fff; }
+.calendar-day.rejected .calendar-date { color: #fff; }
+.calendar-day.future { color: var(--muted); }
+tr.clickable[aria-selected="true"] { background: #eef4f2; }
+@media (max-width: 700px) {
+  .calendar-day { min-height: 64px; padding: 8px; }
+  .calendar-state, .calendar-times, .calendar-note { display: none; }
+}
