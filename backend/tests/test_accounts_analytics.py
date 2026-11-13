@@ -254,9 +254,9 @@ def add_staff_event(owner_conn: Any, school: School, staff: uuid.UUID, kind: str
 @pytest.fixture
 def staffed(week: School, owner_conn: Any, factory: Factory) -> uuid.UUID:
     """Laura teaches; she comes Mon and Tue (7:00-13:00 and 6:30-12:00)."""
-    laura = factory.staff(
-        week.inst, "DOC-1", factory.user("laura@colegio-a.test", name="Laura Docente")
-    )
+    user = factory.user("laura@colegio-a.test", name="Laura Docente")
+    factory.member(week.inst, user, "TEACHER")
+    laura = factory.staff(week.inst, "DOC-1", user)
     add_staff_event(owner_conn, week, laura, "CHECK_IN", "2026-11-09 07:00-05")
     add_staff_event(owner_conn, week, laura, "CHECK_OUT", "2026-11-09 13:00-05")
     add_staff_event(owner_conn, week, laura, "CHECK_IN", "2026-11-10 06:30-05")
