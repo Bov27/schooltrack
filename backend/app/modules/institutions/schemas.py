@@ -138,3 +138,14 @@ class AdminAssign(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     user_email: str = Field(max_length=320)
+
+
+class StudentUpdate(BaseModel):
+    """Partial update. `user_email` links an app account; `unlink_account` removes it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_name: str | None = Field(default=None, min_length=1, max_length=200)
+    is_active: bool | None = None
+    user_email: str | None = Field(default=None, max_length=320)
+    unlink_account: bool = False

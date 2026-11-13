@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatArea, parseLatLng, reasonLabel, statusTone } from "./format";
+import { defaultRange, formatArea, formatRate, parseLatLng, reasonLabel, statusTone } from "./format";
 
 describe("format helpers", () => {
   it("labels known reasons and passes unknown ones through", () => {
@@ -32,5 +32,19 @@ describe("format helpers", () => {
 
   it.each(["", "abc", "95, 10", "2.44, 200", "2.44"])("rejects %j", (text) => {
     expect(parseLatLng(text)).toBeNull();
+  });
+});
+
+describe("analytics helpers", () => {
+  it("formats rates", () => {
+    expect(formatRate(null)).toBe("–");
+    expect(formatRate(0.6)).toBe("60%");
+    expect(formatRate(0.8333)).toBe("83.3%");
+  });
+
+  it("defaults to Monday of the current week until today", () => {
+    expect(defaultRange(new Date(2026, 10, 13))).toEqual({ from: "2026-11-09", to: "2026-11-13" });
+    expect(defaultRange(new Date(2026, 10, 9))).toEqual({ from: "2026-11-09", to: "2026-11-09" });
+    expect(defaultRange(new Date(2026, 10, 15))).toEqual({ from: "2026-11-09", to: "2026-11-15" });
   });
 });

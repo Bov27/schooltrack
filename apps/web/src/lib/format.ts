@@ -45,3 +45,22 @@ export function parseLatLng(text: string): { latitude: number; longitude: number
   if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
   return { latitude, longitude };
 }
+
+export function formatRate(rate: number | null): string {
+  return rate === null ? "–" : `${Math.round(rate * 1000) / 10}%`;
+}
+
+function isoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Default analytics range: Monday of the current week until today (local dates). */
+export function defaultRange(today: Date): { from: string; to: string } {
+  const monday = new Date(today);
+  const offset = (today.getDay() + 6) % 7; // 0 = Monday
+  monday.setDate(today.getDate() - offset);
+  return { from: isoDate(monday), to: isoDate(today) };
+}

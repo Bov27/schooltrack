@@ -80,6 +80,12 @@ bodies never carry `institution_id` (schemas use `extra="forbid"`).
 | GET | `/api/v1/attendance/guardian/students` | guardians |
 | POST/GET | `/api/v1/guardians`, POST `/api/v1/guardians/{id}/students` | School Admin (linking audited) |
 | GET | `/api/v1/notifications`, POST `/api/v1/notifications/{id}/read` | authenticated (own) |
+| POST | `/api/v1/accounts` | School Admin (audited) |
+| POST | `/api/v1/users/me/password` | authenticated (signs out every session) |
+| PATCH | `/api/v1/students/{id}` | School Admin (link/unlink account, rename, activate; audited) |
+| GET | `/api/v1/analytics/attendance` (+ `.csv`) | School Admin, Teacher |
+| PATCH/DELETE | `/api/v1/geofences/{id}` | School Admin (delete only if never used; audited) |
+| GET | `/api/v1/platform/institutions`, POST `/api/v1/platform/institutions/{id}/admins` | Super Admin |
 
 ## Bootstrapping the first Super Admin
 
