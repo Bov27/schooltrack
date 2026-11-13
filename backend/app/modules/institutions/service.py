@@ -5,10 +5,13 @@ Tenant-scoped methods assume the caller has already set the tenant context
 a query forgets to filter. Platform methods run on the platform session.
 """
 
+import enum
 import uuid
 from dataclasses import dataclass, field
+from datetime import date
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,8 +23,24 @@ from app.modules.institutions.models import (
     InstitutionMembership,
     InstitutionRole,
     MembershipStatus,
+    Staff,
+    StaffType,
+    Student,
     UserRole,
 )
+
+
+class SubjectKind(enum.StrEnum):
+    STUDENT = "STUDENT"
+    STAFF = "STAFF"
+
+
+@dataclass(frozen=True, slots=True)
+class Subject:
+    """A person whose attendance is recorded."""
+
+    kind: SubjectKind
+    id: uuid.UUID
 
 
 @dataclass(frozen=True, slots=True)
@@ -165,3 +184,140 @@ class InstitutionService:
         if institution is None:
             raise NotFoundError("Institution not found")
         return institution
+
+    # ---- people (tenant context already set) --------------------------------------
+    async def _ensure_member_with_role(
+        self,
+        institution_id: uuid.UUID,
+        user_id: uuid.UUID,
+        role: InstitutionRole,
+        granted_by: uuid.UUID,
+    ) -> None:
+        await self.session.execute(
+            pg_insert(InstitutionMembership)
+            .values(institution_id=institution_id, user_id=user_id, status=MembershipStatus.ACTIVE)
+            .on_conflict_do_nothing(index_elements=["institution_id", "user_id"])
+        )
+        await self.session.execute(
+            pg_insert(UserRole)
+            .values(
+                institution_id=institution_id, user_id=user_id, role=role, granted_by=granted_by
+            )
+            .on_conflict_do_nothing()
+        )
+
+    async def create_student(
+        self,
+        institution_id: uuid.UUID,
+        *,
+        student_code: str,
+        full_name: str,
+        date_of_birth: date | None,
+        user_id: uuid.UUID | None,
+        granted_by: uuid.UUID,
+    ) -> Student:
+        if user_id is not None:
+            await self._ensure_member_with_role(
+                institution_id, user_id, InstitutionRole.STUDENT, granted_by
+            )
+        student = Student(
+            institution_id=institution_id,
+            student_code=student_code.strip(),
+            full_name=full_name.strip(),
+            date_of_birth=date_of_birth,
+            user_id=user_id,
+        )
+        self.session.add(student)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise ConflictError("A student with that code or account already exists") from exc
+        await self.session.refresh(student)
+        await self.session.commit()
+        return student
+
+    async def list_students(self, institution_id: uuid.UUID) -> list[Student]:
+        result = await self.session.scalars(
+            select(Student)
+            .where(Student.institution_id == institution_id)
+            .order_by(Student.full_name)
+        )
+        return list(result)
+
+    async def create_staff(
+        self,
+        institution_id: uuid.UUID,
+        *,
+        employee_code: str,
+        staff_type: StaffType,
+        user_id: uuid.UUID,
+        granted_by: uuid.UUID,
+    ) -> Staff:
+        role = InstitutionRole.TEACHER if staff_type is StaffType.TEACHER else InstitutionRole.STAFF
+        await self._ensure_member_with_role(institution_id, user_id, role, granted_by)
+        member = Staff(
+            institution_id=institution_id,
+            employee_code=employee_code.strip(),
+            staff_type=staff_type,
+            user_id=user_id,
+        )
+        self.session.add(member)
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise ConflictError("A staff member with that code or account already exists") from exc
+        await self.session.refresh(member)
+        await self.session.commit()
+        return member
+
+    async def list_staff(self, institution_id: uuid.UUID) -> list[Staff]:
+        result = await self.session.scalars(
+            select(Staff)
+            .where(Staff.institution_id == institution_id)
+            .order_by(Staff.employee_code)
+        )
+        return list(result)
+
+    async def subjects_for_user(
+        self, institution_id: uuid.UUID, user_id: uuid.UUID
+    ) -> list[Subject]:
+        """The active student and/or staff records linked to this user account."""
+        subjects: list[Subject] = []
+        student_id = await self.session.scalar(
+            select(Student.id).where(
+                Student.institution_id == institution_id,
+                Student.user_id == user_id,
+                Student.is_active.is_(True),
+            )
+        )
+        if student_id is not None:
+            subjects.append(Subject(SubjectKind.STUDENT, student_id))
+        staff_id = await self.session.scalar(
+            select(Staff.id).where(
+                Staff.institution_id == institution_id,
+                Staff.user_id == user_id,
+                Staff.is_active.is_(True),
+            )
+        )
+        if staff_id is not None:
+            subjects.append(Subject(SubjectKind.STAFF, staff_id))
+        return subjects
+
+    async def campus_exists(self, institution_id: uuid.UUID, campus_id: uuid.UUID) -> bool:
+        found = await self.session.scalar(
+            select(Campus.id).where(Campus.institution_id == institution_id, Campus.id == campus_id)
+        )
+        return found is not None
+
+    async def subject_exists(self, institution_id: uuid.UUID, subject: Subject) -> bool:
+        model = Student if subject.kind is SubjectKind.STUDENT else Staff
+        found = await self.session.scalar(
+            select(model.id).where(
+                model.institution_id == institution_id,
+                model.id == subject.id,
+                model.is_active.is_(True),
+            )
+        )
+        return found is not None

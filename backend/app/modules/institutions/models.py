@@ -1,6 +1,6 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import ForeignKey, ForeignKeyConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -79,5 +79,40 @@ class Campus(Base):
     name: Mapped[str]
     address: Mapped[str | None]
     timezone: Mapped[str | None]
+    is_active: Mapped[bool] = mapped_column(server_default=text("true"))
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+
+
+class StaffType(enum.StrEnum):
+    TEACHER = "TEACHER"
+    ADMINISTRATIVE = "ADMINISTRATIVE"
+    SUPPORT = "SUPPORT"
+
+
+class Student(Base):
+    __tablename__ = "students"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    institution_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("institutions.id"))
+    user_id: Mapped[uuid.UUID | None]
+    student_code: Mapped[str]
+    full_name: Mapped[str]
+    date_of_birth: Mapped[date | None]
+    is_active: Mapped[bool] = mapped_column(server_default=text("true"))
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+
+
+class Staff(Base):
+    __tablename__ = "staff"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    institution_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("institutions.id"))
+    user_id: Mapped[uuid.UUID]
+    employee_code: Mapped[str]
+    staff_type: Mapped[StaffType] = mapped_column(pg_enum(StaffType, "staff_type"))
     is_active: Mapped[bool] = mapped_column(server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))

@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, status
 
 from app.api.deps import (
@@ -10,13 +12,18 @@ from app.api.deps import (
     TenantDep,
 )
 from app.api.errors import error_responses
-from app.core.errors import NotFoundError
+from app.core.errors import NotFoundError, PermissionDeniedError
 from app.modules.identity.service import IdentityService
+from app.modules.institutions.models import InstitutionRole
 from app.modules.institutions.schemas import (
     CampusCreate,
     CampusOut,
     InstitutionCreate,
     InstitutionOut,
+    StaffCreate,
+    StaffOut,
+    StudentCreate,
+    StudentOut,
 )
 from app.modules.institutions.service import InstitutionService
 
@@ -85,3 +92,72 @@ async def create_campus(
         tenant.institution_id, name=body.name, address=body.address, timezone=body.timezone
     )
     return CampusOut.model_validate(campus)
+
+
+async def _user_id_for(email: str, session: SessionDep, settings: SettingsDep) -> uuid.UUID:
+    user_id = await IdentityService(session, settings).find_user_id_by_email(email)
+    if user_id is None:
+        raise NotFoundError("No active user with that email")
+    return user_id
+
+
+@router.post(
+    "/students",
+    response_model=StudentOut,
+    status_code=status.HTTP_201_CREATED,
+    responses=error_responses(401, 403, 404, 409),
+    tags=["people"],
+)
+async def create_student(
+    body: StudentCreate, tenant: SchoolAdminDep, session: SessionDep, settings: SettingsDep
+) -> StudentOut:
+    """Register a student. With `user_email`, that account becomes an active member with
+    the STUDENT role, so the student can record attendance from the mobile app."""
+    user_id = None
+    if body.user_email is not None:
+        user_id = await _user_id_for(body.user_email, session, settings)
+    student = await InstitutionService(session).create_student(
+        tenant.institution_id,
+        student_code=body.student_code,
+        full_name=body.full_name,
+        date_of_birth=body.date_of_birth,
+        user_id=user_id,
+        granted_by=tenant.user_id,
+    )
+    return StudentOut.model_validate(student)
+
+
+@router.get("/students", response_model=list[StudentOut], responses=_errors, tags=["people"])
+async def list_students(tenant: TenantDep, session: SessionDep) -> list[StudentOut]:
+    if not tenant.has_any(InstitutionRole.SCHOOL_ADMIN, InstitutionRole.TEACHER):
+        raise PermissionDeniedError("Only school admins and teachers can list students")
+    students = await InstitutionService(session).list_students(tenant.institution_id)
+    return [StudentOut.model_validate(s) for s in students]
+
+
+@router.post(
+    "/staff",
+    response_model=StaffOut,
+    status_code=status.HTTP_201_CREATED,
+    responses=error_responses(401, 403, 404, 409),
+    tags=["people"],
+)
+async def create_staff(
+    body: StaffCreate, tenant: SchoolAdminDep, session: SessionDep, settings: SettingsDep
+) -> StaffOut:
+    """Register a staff member (teachers get the TEACHER role, others STAFF)."""
+    user_id = await _user_id_for(body.user_email, session, settings)
+    member = await InstitutionService(session).create_staff(
+        tenant.institution_id,
+        employee_code=body.employee_code,
+        staff_type=body.staff_type,
+        user_id=user_id,
+        granted_by=tenant.user_id,
+    )
+    return StaffOut.model_validate(member)
+
+
+@router.get("/staff", response_model=list[StaffOut], responses=_errors, tags=["people"])
+async def list_staff(tenant: SchoolAdminDep, session: SessionDep) -> list[StaffOut]:
+    members = await InstitutionService(session).list_staff(tenant.institution_id)
+    return [StaffOut.model_validate(m) for m in members]

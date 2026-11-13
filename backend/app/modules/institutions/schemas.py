@@ -1,9 +1,11 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 from zoneinfo import available_timezones
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+
+from app.modules.institutions.models import StaffType
 
 _TIMEZONES = frozenset(available_timezones())
 
@@ -62,3 +64,45 @@ class CampusCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     address: str | None = Field(default=None, max_length=500)
     timezone: Timezone | None = None
+
+
+class StudentCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    student_code: str = Field(min_length=1, max_length=50)
+    full_name: str = Field(min_length=1, max_length=200)
+    date_of_birth: date | None = None
+    user_email: str | None = Field(
+        default=None,
+        max_length=320,
+        description="Existing account that the student uses in the mobile app (optional).",
+    )
+
+
+class StudentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    student_code: str
+    full_name: str
+    date_of_birth: date | None
+    user_id: uuid.UUID | None
+    is_active: bool
+
+
+class StaffCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    employee_code: str = Field(min_length=1, max_length=50)
+    staff_type: StaffType
+    user_email: str = Field(max_length=320)
+
+
+class StaffOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    employee_code: str
+    staff_type: StaffType
+    user_id: uuid.UUID
+    is_active: bool

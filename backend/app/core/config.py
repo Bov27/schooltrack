@@ -42,6 +42,10 @@ class Settings(BaseSettings):
     location_max_age_s: int = Field(default=30, gt=0, le=600)
     request_max_age_s: int = Field(default=15, gt=0, le=600)
     clock_skew_tolerance_s: int = Field(default=5, ge=0, le=120)
+    # Faster than this between two consecutive located events is physically implausible
+    # for a school commute (40 m/s = 144 km/h) and is flagged for review.
+    max_plausible_speed_m_s: float = Field(default=40.0, gt=0)
+    movement_window_h: float = Field(default=12.0, gt=0, le=72)
     geofence_min_area_m2: float = Field(default=100.0, gt=0)
     geofence_max_area_m2: float = Field(default=5_000_000.0, gt=0)  # 5 km²
 

@@ -78,6 +78,33 @@ class Factory:
                 (institution_id, user_id, role),
             )
 
+    def student(
+        self, institution_id: uuid.UUID, code: str, user_id: uuid.UUID | None = None
+    ) -> uuid.UUID:
+        return self._one(
+            "INSERT INTO students (institution_id, student_code, full_name, user_id) "
+            "VALUES (%s, %s, %s, %s) RETURNING id",
+            (institution_id, code, f"Estudiante {code}", user_id),
+        )
+
+    def staff(
+        self, institution_id: uuid.UUID, code: str, user_id: uuid.UUID, staff_type: str = "TEACHER"
+    ) -> uuid.UUID:
+        return self._one(
+            "INSERT INTO staff (institution_id, employee_code, staff_type, user_id) "
+            "VALUES (%s, %s, %s, %s) RETURNING id",
+            (institution_id, code, staff_type, user_id),
+        )
+
+    def geofence(
+        self, institution_id: uuid.UUID, campus_id: uuid.UUID, wkt: str, name: str = "Perímetro"
+    ) -> uuid.UUID:
+        return self._one(
+            "INSERT INTO geofences (institution_id, campus_id, name, area) "
+            "VALUES (%s, %s, %s, ST_GeogFromText(%s)) RETURNING id",
+            (institution_id, campus_id, name, wkt),
+        )
+
     def campus(self, institution_id: uuid.UUID, name: str) -> uuid.UUID:
         return self._one(
             "INSERT INTO campuses (institution_id, name) VALUES (%s, %s) RETURNING id",

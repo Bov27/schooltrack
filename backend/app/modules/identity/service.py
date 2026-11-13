@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
@@ -17,7 +18,14 @@ from app.core.security import (
     password_needs_rehash,
     verify_password,
 )
-from app.modules.identity.models import PlatformAdmin, RefreshToken, User
+from app.modules.identity.models import (
+    Device,
+    DevicePlatform,
+    DeviceStatus,
+    PlatformAdmin,
+    RefreshToken,
+    User,
+)
 
 INVALID_CREDENTIALS = "Invalid email or password"
 INVALID_REFRESH = "Invalid or expired refresh token"
@@ -104,6 +112,59 @@ class IdentityService:
     async def get_active_user(self, user_id: uuid.UUID) -> User | None:
         user = await self.session.get(User, user_id)
         return user if user is not None and user.is_active else None
+
+    # ---- devices ------------------------------------------------------------------
+    async def register_device(
+        self,
+        user_id: uuid.UUID,
+        *,
+        installation_id: str,
+        platform: DevicePlatform,
+        model: str | None,
+        app_version: str | None,
+    ) -> Device:
+        """Idempotent per (user, installation): re-registering updates the metadata.
+        A revoked device stays revoked; only an administrator could restore it."""
+        now = datetime.now(UTC)
+        await self.session.execute(
+            pg_insert(Device)
+            .values(
+                user_id=user_id,
+                installation_id=installation_id,
+                platform=platform,
+                model=model,
+                app_version=app_version,
+                last_seen_at=now,
+            )
+            .on_conflict_do_update(
+                index_elements=["user_id", "installation_id"],
+                set_={"model": model, "app_version": app_version, "last_seen_at": now},
+            )
+        )
+        device = await self.session.scalar(
+            select(Device).where(
+                Device.user_id == user_id, Device.installation_id == installation_id
+            )
+        )
+        await self.session.commit()
+        if device is None:  # pragma: no cover - the upsert guarantees a row
+            raise AuthenticationError("Device registration failed")
+        return device
+
+    async def list_devices(self, user_id: uuid.UUID) -> list[Device]:
+        result = await self.session.scalars(
+            select(Device).where(Device.user_id == user_id).order_by(Device.registered_at)
+        )
+        return list(result)
+
+    async def active_device(self, user_id: uuid.UUID, device_id: uuid.UUID) -> Device | None:
+        return await self.session.scalar(
+            select(Device).where(
+                Device.id == device_id,
+                Device.user_id == user_id,
+                Device.status == DeviceStatus.ACTIVE,
+            )
+        )
 
     async def _issue_pair(
         self, user_id: uuid.UUID, *, family_id: uuid.UUID, replaces: RefreshToken | None = None

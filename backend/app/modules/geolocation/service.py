@@ -84,17 +84,39 @@ class GeolocationService:
         self, institution_id: uuid.UUID, reading: LocationCheck, *, now: datetime | None = None
     ) -> LocationVerdict:
         """Evaluate a reading against the campus geofences. Nothing is stored."""
-        if not await self.repo.campus_exists(institution_id, reading.campus_id):
-            raise NotFoundError("Campus not found")
-        match = await self.repo.nearest_active(
-            institution_id, reading.campus_id, reading.latitude, reading.longitude
+        return await self.evaluate(
+            institution_id,
+            campus_id=reading.campus_id,
+            latitude=reading.latitude,
+            longitude=reading.longitude,
+            accuracy_m=reading.accuracy_m,
+            captured_at=reading.captured_at,
+            is_mock=reading.is_mock,
+            now=now,
         )
+
+    async def evaluate(
+        self,
+        institution_id: uuid.UUID,
+        *,
+        campus_id: uuid.UUID,
+        latitude: float,
+        longitude: float,
+        accuracy_m: float,
+        captured_at: datetime,
+        is_mock: bool | None,
+        now: datetime | None = None,
+    ) -> LocationVerdict:
+        """The single entry point for location decisions (also used by attendance)."""
+        if not await self.repo.campus_exists(institution_id, campus_id):
+            raise NotFoundError("Campus not found")
+        match = await self.repo.nearest_active(institution_id, campus_id, latitude, longitude)
         return evaluate_location(
             rules=rules_from_settings(self.settings),
             now=now or datetime.now(UTC),
-            captured_at=reading.captured_at,
-            accuracy_m=reading.accuracy_m,
-            is_mock=reading.is_mock,
+            captured_at=captured_at,
+            accuracy_m=accuracy_m,
+            is_mock=is_mock,
             match=match,
         )
 
