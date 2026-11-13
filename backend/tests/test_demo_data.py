@@ -82,3 +82,20 @@ def test_live_check_in_inside_the_demo_geofence(
     )
     assert response.status_code == 201, response.text
     assert response.json()["validation_status"] == "VALIDATED"
+
+
+def test_roster_lists_every_student_with_the_last_event(api: TestClient, demo: uuid.UUID) -> None:
+    response = api.get("/api/v1/attendance/roster", headers=auth(api, TEACHER))
+    assert response.status_code == 200, response.text
+    roster = response.json()
+    assert len(roster) == 8
+    assert roster[0]["full_name"] == "Emiliano Caicedo"  # alphabetical
+    assert {r["state"] for r in roster} == {"OUTSIDE"}
+    seen = [r for r in roster if r["last_event_type"] is not None]
+    assert seen and all(r["last_event_type"] == "CHECK_OUT" for r in seen)
+
+
+@pytest.mark.parametrize("email", [STUDENT, GUARDIAN])
+def test_roster_is_for_staff_only(api: TestClient, demo: uuid.UUID, email: str) -> None:
+    response = api.get("/api/v1/attendance/roster", headers=auth(api, email))
+    assert response.status_code == 403

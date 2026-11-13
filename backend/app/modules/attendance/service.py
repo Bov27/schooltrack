@@ -320,6 +320,9 @@ class AttendanceService:
             offset=offset,
         )
 
+    async def roster(self, institution_id: uuid.UUID) -> list[dict[str, Any]]:
+        return await self.repo.roster(institution_id)
+
     async def current_states(
         self, institution_id: uuid.UUID, subjects: list[Subject]
     ) -> list[tuple[Subject, AttendanceState, uuid.UUID | None]]:

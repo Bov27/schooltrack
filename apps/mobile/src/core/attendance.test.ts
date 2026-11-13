@@ -6,6 +6,7 @@ import {
   describeOutcome,
   ownHistoryPath,
   reasonMessage,
+  splitActions,
   withRetries,
 } from "./attendance";
 
@@ -67,7 +68,7 @@ describe("describeOutcome", () => {
   };
 
   it("confirms a validated event", () => {
-    expect(describeOutcome(base, false)).toEqual({ tone: "ok", title: "Registrar entrada: listo", details: [] });
+    expect(describeOutcome(base, false)).toEqual({ tone: "ok", title: "Entrada registrada", details: [] });
   });
 
   it("explains a rejection in plain language", () => {
@@ -143,5 +144,17 @@ describe("ownHistoryPath", () => {
 
   it("loads no history for an account without a student or staff record", () => {
     expect(ownHistoryPath(null)).toBeNull();
+  });
+});
+
+describe("splitActions", () => {
+  it("puts the usual next step on the big button", () => {
+    expect(splitActions(["CHECK_IN"])).toEqual({ primary: "CHECK_IN", secondary: [] });
+    expect(splitActions(["TEMPORARY_CHECK_OUT", "CHECK_OUT"])).toEqual({
+      primary: "CHECK_OUT",
+      secondary: ["TEMPORARY_CHECK_OUT"],
+    });
+    expect(splitActions(["RETURN", "CHECK_OUT"])).toEqual({ primary: "RETURN", secondary: ["CHECK_OUT"] });
+    expect(splitActions([])).toEqual({ primary: null, secondary: [] });
   });
 });

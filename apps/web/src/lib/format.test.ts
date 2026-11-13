@@ -1,10 +1,20 @@
 import { describe, expect, it } from "vitest";
 
-import { defaultRange, formatArea, formatRate, parseLatLng, reasonLabel, statusTone } from "./format";
+import {
+  defaultRange,
+  formatArea,
+  formatRate,
+  initials,
+  parseLatLng,
+  reasonLabel,
+  roleLabel,
+  statusLabel,
+  statusTone,
+} from "./format";
 
 describe("format helpers", () => {
   it("labels known reasons and passes unknown ones through", () => {
-    expect(reasonLabel("OUTSIDE_GEOFENCE")).toBe("Outside the campus area");
+    expect(reasonLabel("OUTSIDE_GEOFENCE")).toBe("Fuera del área de la sede");
     expect(reasonLabel("SOMETHING_NEW")).toBe("SOMETHING_NEW");
   });
 
@@ -46,5 +56,24 @@ describe("analytics helpers", () => {
     expect(defaultRange(new Date(2026, 10, 13))).toEqual({ from: "2026-11-09", to: "2026-11-13" });
     expect(defaultRange(new Date(2026, 10, 9))).toEqual({ from: "2026-11-09", to: "2026-11-09" });
     expect(defaultRange(new Date(2026, 10, 15))).toEqual({ from: "2026-11-09", to: "2026-11-15" });
+  });
+});
+
+describe("labels", () => {
+  it("builds initials from the first and last names", () => {
+    expect(initials("Valentina Muñoz")).toBe("VM");
+    expect(initials("  Laura María Docente Demo ")).toBe("LD");
+    expect(initials("Rectoría")).toBe("R");
+    expect(initials("")).toBe("?");
+  });
+
+  it("shows the most relevant role", () => {
+    expect(roleLabel(["TEACHER", "SCHOOL_ADMIN"])).toBe("Administración");
+    expect(roleLabel(["GUARDIAN"])).toBe("Acudiente");
+  });
+
+  it("translates validation statuses", () => {
+    expect(statusLabel("FLAGGED_FOR_REVIEW")).toBe("Por revisar");
+    expect(statusLabel("SOMETHING_NEW")).toBe("SOMETHING_NEW");
   });
 });

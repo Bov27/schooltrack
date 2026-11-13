@@ -88,3 +88,15 @@ export interface AttendanceEvent {
 export interface ApiErrorBody {
   error?: { code?: string; message?: string; details?: { loc: unknown[]; msg: string }[] };
 }
+
+export type AttendanceState = "OUTSIDE" | "PRESENT" | "TEMPORARY_EXIT";
+
+export interface RosterEntry {
+  student_id: string;
+  full_name: string;
+  student_code: string;
+  state: AttendanceState;
+  last_event_type: AttendanceEvent["event_type"] | null;
+  last_event_at: string | null;
+  last_validation_status: ValidationStatus | null;
+}

@@ -36,7 +36,7 @@ export function errorMessage(body: ApiErrorBody, status: number): string {
   if (error?.details?.length) {
     return error.details.map((d) => `${d.loc.slice(1).join(".")}: ${d.msg}`).join("; ");
   }
-  return error?.message ?? `Request failed (${status})`;
+  return error?.message ?? `La solicitud falló (error ${status})`;
 }
 
 /** Calls the API through the BFF proxy (cookies carry the session). */
@@ -49,7 +49,7 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`/api/backend/${path.replace(/^\//, "")}`, { ...init, headers });
   if (response.status === 401) {
     window.location.href = `/login?next=${encodeURIComponent(window.location.pathname)}`;
-    throw new ApiError(401, "Session expired");
+    throw new ApiError(401, "La sesión expiró");
   }
   if (response.status === 204) return undefined as T;
   const body: unknown = await response.json().catch(() => ({}));
