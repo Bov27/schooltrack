@@ -11,14 +11,29 @@ updates:
     directory: /apps/web
     schedule: { interval: weekly }
     open-pull-requests-limit: 5
+    # Major upgrades (Next, TypeScript, Vitest) are planned by hand, not merged from a bot PR.
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: npm
     directory: /apps/mobile
     schedule: { interval: monthly }
     open-pull-requests-limit: 3
-    # Expo pins React Native and its native modules per SDK; upgrade those with `npx expo install --fix`.
+    # Expo pins React, React Native and its native modules per SDK (0.x minors are breaking
+    # for React Native). Upgrade them together with `npx expo install --fix` on an SDK bump.
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+      - dependency-name: "@types/react"
+      - dependency-name: "react-native"
+      - dependency-name: "expo"
+      - dependency-name: "expo-*"
   - package-ecosystem: docker
     directory: /backend
     schedule: { interval: monthly }
+    # Python minor versions (3.12 -> 3.13) are an upgrade decision, not a routine bump.
+    ignore:
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
