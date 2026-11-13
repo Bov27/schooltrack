@@ -16,6 +16,9 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.36,<2.1",
     "psycopg[binary]>=3.2,<4",
     "alembic>=1.14,<2",
+    "pyjwt>=2.10,<3",
+    "argon2-cffi>=23.1",
+    "tzdata>=2024.2",
 ]
 
 [project.optional-dependencies]
@@ -53,7 +56,7 @@ ignore = []
 extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]          # assert is the point of a test
+"tests/**" = ["S101", "S105", "S106"]   # asserts and fictional credentials
 "migrations/**" = ["E501", "S608"]   # SQL built from module constants, no user input
 
 [tool.mypy]

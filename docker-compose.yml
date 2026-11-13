@@ -10,6 +10,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-schooltrack}            # owner role: migrations only
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-schooltrack_owner_dev}
       SCHOOLTRACK_APP_DB_PASSWORD: ${SCHOOLTRACK_APP_DB_PASSWORD:-schooltrack_app_dev}
+      SCHOOLTRACK_PLATFORM_DB_PASSWORD: ${SCHOOLTRACK_PLATFORM_DB_PASSWORD:-schooltrack_platform_dev}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -38,6 +39,12 @@ services:
       ENVIRONMENT: local
       # Runtime role: RLS applies to it.
       DATABASE_URL: postgresql+psycopg://schooltrack_app:${SCHOOLTRACK_APP_DB_PASSWORD:-schooltrack_app_dev}@db:5432/${POSTGRES_DB:-schooltrack}
+      # Super-Admin endpoints only (BYPASSRLS).
+      PLATFORM_DATABASE_URL: postgresql+psycopg://schooltrack_platform:${SCHOOLTRACK_PLATFORM_DB_PASSWORD:-schooltrack_platform_dev}@db:5432/${POSTGRES_DB:-schooltrack}
+      # Development-only default. Set a long random JWT_SECRET in .env for anything shared.
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-me-0123456789abcdef}
+      # Used by `docker compose exec api python -m app.cli ...`
+      MIGRATIONS_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-schooltrack}:${POSTGRES_PASSWORD:-schooltrack_owner_dev}@db:5432/${POSTGRES_DB:-schooltrack}
       CORS_ORIGINS: '["http://localhost:3000"]'
     ports:
       - "${API_PORT:-8000}:8000"

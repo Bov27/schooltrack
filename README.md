@@ -8,7 +8,7 @@ attendance state machine, and keeps an immutable, auditable history.
 Guardians and school administrators follow attendance from the web dashboard
 and through notifications.
 
-> **Status: Week 1 of 8, architecture and infrastructure.** This is a
+> **Status: Week 2 of 8, authentication and tenant isolation.** This is a
 > portfolio project under active development. It is not production-ready and
 > must not be used with real personal data until its security, privacy and
 > operations have been independently validated.
@@ -61,6 +61,18 @@ API with the restricted runtime role.
 
 To change ports or passwords, copy `.env.example` to `.env`.
 
+Create the first Super Admin, then log in through the API docs:
+
+```bash
+docker compose exec api python -m app.cli create-platform-admin \
+    --email admin@example.test --name "Platform Admin"
+```
+
+If you started the stack before Week 2, recreate the database volume once with
+`docker compose down -v`, so the new `schooltrack_platform` role is created.
+Authentication and tenant selection are described in
+[docs/api/authentication.md](docs/api/authentication.md).
+
 ## Backend development without Docker
 
 ```bash
@@ -104,8 +116,8 @@ docs/
 | Week | Focus | Status |
 |---|---|---|
 | 1 | Architecture, schema design, Docker, backend skeleton, CI | ✅ |
-| 2 | Authentication, roles, institutions, tenant isolation tests | ⏳ |
-| 3 | Geofences and PostGIS validation | |
+| 2 | Authentication, roles, institutions, tenant isolation tests | ✅ |
+| 3 | Geofences and PostGIS validation | ⏳ |
 | 4 | Attendance engine: state machine, idempotency, audit | |
 | 5 | Mobile app and admin dashboard | |
 | 6 | Redis, Celery, notifications, offline sync | |

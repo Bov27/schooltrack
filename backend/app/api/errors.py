@@ -1,5 +1,6 @@
 """One error shape for every failure: {"error": {"code", "message", "details"?, "request_id"?}}."""
 
+from collections.abc import Mapping
 from typing import Any
 
 from fastapi import FastAPI, Request, status
@@ -7,6 +8,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
+from app.core.errors import AuthenticationError, DomainError
 
 
 class ErrorBody(BaseModel):
@@ -34,7 +37,11 @@ _STATUS_CODES = {
 
 
 def _response(
-    request: Request, status_code: int, message: str, details: Any = None
+    request: Request,
+    status_code: int,
+    message: str,
+    details: Any = None,
+    headers: Mapping[str, str] | None = None,
 ) -> JSONResponse:
     body = ErrorResponse(
         error=ErrorBody(
@@ -44,13 +51,22 @@ def _response(
             request_id=getattr(request.state, "request_id", None),
         )
     )
-    return JSONResponse(status_code=status_code, content=body.model_dump(exclude_none=True))
+    return JSONResponse(
+        status_code=status_code, content=body.model_dump(exclude_none=True), headers=headers
+    )
 
 
 async def _http_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     if not isinstance(exc, StarletteHTTPException):  # pragma: no cover - registration guarantees it
         raise exc
-    return _response(request, exc.status_code, str(exc.detail))
+    return _response(request, exc.status_code, str(exc.detail), headers=exc.headers)
+
+
+async def _domain_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    if not isinstance(exc, DomainError):  # pragma: no cover
+        raise exc
+    headers = {"WWW-Authenticate": "Bearer"} if isinstance(exc, AuthenticationError) else None
+    return _response(request, exc.status_code, exc.message, headers=headers)
 
 
 async def _validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -68,6 +84,7 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
 
 
 def register_error_handlers(app: FastAPI) -> None:
+    app.add_exception_handler(DomainError, _domain_exception_handler)
     app.add_exception_handler(StarletteHTTPException, _http_exception_handler)
     app.add_exception_handler(RequestValidationError, _validation_exception_handler)
     app.add_exception_handler(Exception, _unhandled_exception_handler)

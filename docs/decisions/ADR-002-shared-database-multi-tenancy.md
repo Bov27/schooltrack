@@ -54,7 +54,7 @@ Option 4, built in layers (details in `docs/database/schema.md`):
    - `schooltrack` (owner): runs migrations; never used by the API.
    - `schooltrack_app`: the API runtime role. `NOSUPERUSER NOBYPASSRLS`,
      owns nothing.
-   - `schooltrack_platform` (Week 2): `BYPASSRLS`, used only by
+   - `schooltrack_platform` (implemented in Week 2): `BYPASSRLS`, used only by
      Super-Admin endpoints behind a separate dependency, and audited.
 
 ## Consequences

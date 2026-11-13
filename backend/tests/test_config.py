@@ -48,3 +48,13 @@ def test_sql_echo_rejected_when_deployed() -> None:
 
 def test_cors_wildcard_allowed_locally() -> None:
     assert make_settings(environment="local", cors_origins=["*"]).cors_origins == ["*"]
+
+
+def test_short_jwt_secret_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="jwt_secret"):
+        make_settings(jwt_secret="too-short")
+
+
+def test_jwt_secret_is_not_exposed_in_repr() -> None:
+    settings = make_settings()
+    assert settings.jwt_secret.get_secret_value() not in repr(settings)

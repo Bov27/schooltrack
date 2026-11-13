@@ -32,6 +32,8 @@ jobs:
     env:
       MIGRATIONS_DATABASE_URL: postgresql+psycopg://schooltrack:ci_owner@localhost:5432/schooltrack
       DATABASE_URL: postgresql+psycopg://schooltrack_app:ci_app@localhost:5432/schooltrack
+      PLATFORM_DATABASE_URL: postgresql+psycopg://schooltrack_platform:ci_platform@localhost:5432/schooltrack
+      JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
 
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +53,7 @@ jobs:
       - name: Mypy
         run: mypy app
 
-      - name: Create runtime role (same script as docker compose)
+      - name: Create runtime and platform roles (same script as docker compose)
         working-directory: .
         env:
           PGHOST: localhost
@@ -59,6 +61,7 @@ jobs:
           POSTGRES_USER: schooltrack
           POSTGRES_DB: schooltrack
           SCHOOLTRACK_APP_DB_PASSWORD: ci_app
+          SCHOOLTRACK_PLATFORM_DB_PASSWORD: ci_platform
         run: bash infrastructure/docker/postgres/initdb/20-create-app-role.sh
 
       - name: Migrations (upgrade, downgrade, upgrade)

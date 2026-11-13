@@ -66,8 +66,8 @@ CREATE TYPE device_status          AS ENUM ('ACTIVE', 'REVOKED');
 -- role (see ADR-002).
 CREATE TABLE institutions (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    name        text NOT NULL,
-    slug        citext NOT NULL UNIQUE,
+    name        text NOT NULL CHECK (length(btrim(name)) > 0),
+    slug        citext NOT NULL UNIQUE CHECK (slug ~ '^[a-z0-9]+(-[a-z0-9]+)*$'),
     country     char(2) NOT NULL DEFAULT 'CO',
     timezone    text NOT NULL DEFAULT 'America/Bogota',
     is_active   boolean NOT NULL DEFAULT true,
@@ -92,6 +92,18 @@ CREATE TABLE platform_admins (
     user_id     uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     granted_at  timestamptz NOT NULL DEFAULT now(),
     granted_by  uuid REFERENCES users(id)
+);
+
+-- One row per issued refresh token (the JWT carries its id). Tokens of one login
+-- share family_id; presenting a rotated token revokes the whole family.
+CREATE TABLE refresh_tokens (
+    id           uuid PRIMARY KEY,
+    user_id      uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    family_id    uuid NOT NULL,
+    expires_at   timestamptz NOT NULL,
+    revoked_at   timestamptz,
+    replaced_by  uuid REFERENCES refresh_tokens(id),
+    created_at   timestamptz NOT NULL DEFAULT now()
 );
 
 -- Devices belong to a user, not to an institution.
@@ -139,7 +151,7 @@ CREATE TABLE user_roles (
 CREATE TABLE campuses (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     institution_id  uuid NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
-    name            text NOT NULL,
+    name            text NOT NULL CHECK (length(btrim(name)) > 0),
     address         text,
     timezone        text,                        -- NULL = inherit from institution
     is_active       boolean NOT NULL DEFAULT true,

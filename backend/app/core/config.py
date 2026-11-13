@@ -3,7 +3,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, PostgresDsn, model_validator
+from pydantic import Field, PostgresDsn, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 Environment = Literal["local", "test", "staging", "production"]
@@ -22,8 +22,18 @@ class Settings(BaseSettings):
     database_url: PostgresDsn
     # Owner connection used only by Alembic. Falls back to database_url when unset.
     migrations_database_url: PostgresDsn | None = None
+    # Super-Admin connection (schooltrack_platform, BYPASSRLS). Platform endpoints answer
+    # 503 when it is not configured.
+    platform_database_url: PostgresDsn | None = None
     db_pool_size: int = Field(default=10, ge=1, le=100)
     db_echo: bool = False
+
+    # Authentication
+    jwt_secret: SecretStr
+    jwt_issuer: str = "schooltrack"
+    jwt_audience: str = "schooltrack-api"
+    access_token_ttl_minutes: int = Field(default=15, ge=1, le=60)
+    refresh_token_ttl_days: int = Field(default=14, ge=1, le=90)
 
     # Geolocation validation defaults (experimental values from the project brief;
     # institutions will be able to override them).
@@ -34,6 +44,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _check_deployed_environment(self) -> "Settings":
+        if len(self.jwt_secret.get_secret_value()) < 32:
+            raise ValueError("jwt_secret must be at least 32 characters")
         if self.environment in ("staging", "production"):
             if "*" in self.cors_origins:
                 raise ValueError("CORS wildcard is not allowed outside local/test environments")

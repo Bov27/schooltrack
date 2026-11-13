@@ -35,6 +35,17 @@ class Database:
         )
         self.session_factory = async_sessionmaker(self.engine, expire_on_commit=False)
 
+        # Super-Admin connection (BYPASSRLS). Small pool: platform operations are rare.
+        self.platform_engine: AsyncEngine | None = None
+        self.platform_session_factory: async_sessionmaker[AsyncSession] | None = None
+        if settings.platform_database_url is not None:
+            self.platform_engine = create_async_engine(
+                str(settings.platform_database_url), pool_size=2, pool_pre_ping=True
+            )
+            self.platform_session_factory = async_sessionmaker(
+                self.platform_engine, expire_on_commit=False
+            )
+
     async def session(self) -> AsyncIterator[AsyncSession]:
         async with self.session_factory() as session:
             yield session
@@ -63,3 +74,5 @@ class Database:
 
     async def dispose(self) -> None:
         await self.engine.dispose()
+        if self.platform_engine is not None:
+            await self.platform_engine.dispose()
