@@ -40,6 +40,9 @@ jobs:
         env:
           NEXT_TELEMETRY_DISABLED: "1"
 
+      - name: Print resolved lockfile (temporary, to commit it)
+        run: echo "LOCKFILE_B64_START $(gzip -9c package-lock.json | base64 -w0) LOCKFILE_B64_END"
+
       - name: Upload resolved lockfile
         if: ${{ always() && hashFiles('apps/web/package-lock.json') != '' }}
         uses: actions/upload-artifact@v4
