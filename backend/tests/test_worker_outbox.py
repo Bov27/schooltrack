@@ -55,7 +55,7 @@ def school(factory: Factory) -> School:
     inst = factory.institution("colegio-a")
     student_user = factory.user("ana@colegio-a.test", name="Ana Gómez")
     factory.member(inst, student_user, "STUDENT")
-    student = factory.student(inst, "A-001", student_user)
+    student = factory.student(inst, "A-001", student_user, name="Ana Gómez")
     mother = factory.user("mama@colegio-a.test")
     factory.member(inst, mother, "GUARDIAN")
     factory.guardian(inst, mother, student)

@@ -79,12 +79,16 @@ class Factory:
             )
 
     def student(
-        self, institution_id: uuid.UUID, code: str, user_id: uuid.UUID | None = None
+        self,
+        institution_id: uuid.UUID,
+        code: str,
+        user_id: uuid.UUID | None = None,
+        name: str | None = None,
     ) -> uuid.UUID:
         return self._one(
             "INSERT INTO students (institution_id, student_code, full_name, user_id) "
             "VALUES (%s, %s, %s, %s) RETURNING id",
-            (institution_id, code, f"Estudiante {code}", user_id),
+            (institution_id, code, name or f"Estudiante {code}", user_id),
         )
 
     def staff(
