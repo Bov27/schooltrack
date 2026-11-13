@@ -12,7 +12,7 @@ from app.api.deps import (
     TenantDep,
     require_roles,
 )
-from app.api.errors import ErrorResponse
+from app.api.errors import error_responses
 from app.core.errors import NotFoundError
 from app.modules.identity.service import IdentityService
 from app.modules.institutions.models import InstitutionRole
@@ -30,11 +30,7 @@ SchoolAdminDep = Annotated[
     TenantContext, Depends(require_roles(InstitutionRole.SCHOOL_ADMIN))
 ]
 
-_errors = {
-    401: {"model": ErrorResponse},
-    403: {"model": ErrorResponse},
-    409: {"model": ErrorResponse},
-}
+_errors = error_responses(401, 403, 409)
 
 
 @router.get("/institutions", response_model=list[InstitutionOut], tags=["institutions"])
@@ -48,7 +44,7 @@ async def list_institutions(user: CurrentUserDep, session: SessionDep) -> list[I
     "/institutions",
     response_model=InstitutionOut,
     status_code=status.HTTP_201_CREATED,
-    responses={**_errors, 404: {"model": ErrorResponse}},
+    responses=error_responses(401, 403, 404, 409),
     tags=["institutions"],
 )
 async def create_institution(

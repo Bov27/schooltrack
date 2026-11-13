@@ -83,6 +83,14 @@ async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSON
     return _response(request, status.HTTP_500_INTERNAL_SERVER_ERROR, "Internal server error")
 
 
+def error_responses(*status_codes: int) -> dict[int | str, dict[str, Any]]:
+    """OpenAPI documentation for error answers, in the shape FastAPI expects."""
+    responses: dict[int | str, dict[str, Any]] = {}
+    for code in status_codes:
+        responses[code] = {"model": ErrorResponse}
+    return responses
+
+
 def register_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(DomainError, _domain_exception_handler)
     app.add_exception_handler(StarletteHTTPException, _http_exception_handler)

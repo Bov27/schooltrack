@@ -96,9 +96,10 @@ class IdentityService:
         return await self.session.get(PlatformAdmin, user_id) is not None
 
     async def find_user_id_by_email(self, email: str) -> uuid.UUID | None:
-        return await self.session.scalar(
+        user_id: uuid.UUID | None = await self.session.scalar(
             select(User.id).where(User.email == normalize_email(email), User.is_active.is_(True))
         )
+        return user_id
 
     async def get_active_user(self, user_id: uuid.UUID) -> User | None:
         user = await self.session.get(User, user_id)

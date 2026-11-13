@@ -51,9 +51,11 @@ jobs:
         run: ruff check .
 
       - name: Mypy
+        if: ${{ !cancelled() }}
         run: mypy app
 
       - name: Create runtime and platform roles (same script as docker compose)
+        if: ${{ !cancelled() }}
         working-directory: .
         env:
           PGHOST: localhost
@@ -65,7 +67,9 @@ jobs:
         run: bash infrastructure/docker/postgres/initdb/20-create-app-role.sh
 
       - name: Migrations (upgrade, downgrade, upgrade)
+        if: ${{ !cancelled() }}
         run: alembic upgrade head && alembic downgrade base && alembic upgrade head
 
       - name: Tests
+        if: ${{ !cancelled() }}
         run: pytest --cov --cov-report=term-missing

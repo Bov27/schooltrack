@@ -1,7 +1,7 @@
 from fastapi import APIRouter, status
 
 from app.api.deps import CurrentUserDep, SessionDep, SettingsDep
-from app.api.errors import ErrorResponse
+from app.api.errors import error_responses
 from app.modules.identity.schemas import (
     LoginRequest,
     MembershipOut,
@@ -14,7 +14,7 @@ from app.modules.institutions.service import InstitutionService
 
 router = APIRouter(tags=["auth"])
 
-_401 = {401: {"model": ErrorResponse}}
+_401 = error_responses(401)
 
 
 def _token_response(pair: TokenPair) -> TokenResponse:
