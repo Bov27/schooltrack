@@ -75,7 +75,7 @@ async def _validation_exception_handler(request: Request, exc: Exception) -> JSO
     details = [
         {"loc": list(err["loc"]), "msg": err["msg"], "type": err["type"]} for err in exc.errors()
     ]
-    return _response(request, status.HTTP_422_UNPROCESSABLE_ENTITY, "Invalid request", details)
+    return _response(request, 422, "Invalid request", details)
 
 
 async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
