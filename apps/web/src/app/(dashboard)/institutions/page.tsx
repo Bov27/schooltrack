@@ -2,7 +2,8 @@
 
 import { type FormEvent, useState } from "react";
 
-import { useSession } from "@/components/Shell";
+import { Icon } from "@/components/Icon";
+import { Message, PageHead, useSession } from "@/components/Shell";
 import { api, useApi } from "@/lib/client";
 import type { Institution } from "@/lib/types";
 
@@ -34,11 +35,17 @@ function AssignAdmin({ institution, onDone }: { institution: PlatformInstitution
   }
 
   return (
-    <form className="inline" onSubmit={submit}>
-      <input name="email" type="email" required placeholder="account email" aria-label="School admin email" />
-      <button type="submit" className="secondary">Make school admin</button>
-      {ok && <span className="muted">Done. If it is you, reload the page to see the institution.</span>}
-      {error && <span className="error">{error}</span>}
+    <form className="inline" onSubmit={submit} style={{ justifyContent: "flex-end" }}>
+      <input
+        name="email"
+        type="email"
+        required
+        placeholder="correo de la cuenta"
+        aria-label={`Correo del nuevo administrador de ${institution.name}`}
+      />
+      <button type="submit" className="secondary small">Asignar administrador</button>
+      {ok && <span className="muted small">Listo. Si eres tú, recarga la página para ver la institución.</span>}
+      {error && <span className="error small">{error}</span>}
     </form>
   );
 }
@@ -48,7 +55,7 @@ export default function InstitutionsPage() {
   const [error, setError] = useState<string | null>(null);
   const institutions = useApi<PlatformInstitution[]>(me.is_platform_admin ? "platform/institutions" : null);
 
-  if (!me.is_platform_admin) return <div className="panel muted">Platform administrators only.</div>;
+  if (!me.is_platform_admin) return <Message tone="notice">Solo para administradores de la plataforma.</Message>;
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -74,40 +81,52 @@ export default function InstitutionsPage() {
 
   return (
     <>
-      <h2>Institutions</h2>
-      <div className="panel">
-        <h3>New institution</h3>
-        {error && <div className="error">{error}</div>}
+      <PageHead title="Instituciones">Todas las instituciones de la plataforma y quién las administra.</PageHead>
+      <details className="panel">
+        <summary>
+          Nueva institución
+          <Icon name="plus" />
+        </summary>
+        {error && <Message tone="error">{error}</Message>}
         <form className="inline" onSubmit={submit}>
-          <label>Name<input name="name" required /></label>
-          <label>Slug<input name="slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="colegio-san-jose" /></label>
-          <label>Timezone<input name="timezone" placeholder="America/Bogota" /></label>
+          <label>Nombre<input name="name" required placeholder="Colegio San José" /></label>
           <label>
-            First school admin (existing account email)
+            Identificador
+            <input name="slug" required pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="colegio-san-jose" />
+          </label>
+          <label>Zona horaria<input name="timezone" placeholder="America/Bogota" /></label>
+          <label>
+            Primer administrador <span className="hint">(cuenta existente)</span>
             <input name="admin_email" type="email" defaultValue={me.email} />
           </label>
-          <button type="submit">Create</button>
+          <button type="submit">Crear institución</button>
         </form>
-      </div>
-      <div className="panel">
-        <h3>All institutions</h3>
-        {institutions.error && <div className="error">{institutions.error}</div>}
-        <table>
-          <thead>
-            <tr><th>Name</th><th>Slug</th><th>School admins</th><th>Assign a school admin</th></tr>
-          </thead>
-          <tbody>
-            {institutions.data?.map((i) => (
-              <tr key={i.id}>
-                <td>{i.name}</td>
-                <td className="muted">{i.slug}</td>
-                <td>{i.school_admins === 0 ? <span className="badge warn">none</span> : i.school_admins}</td>
-                <td><AssignAdmin institution={i} onDone={institutions.reload} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      </details>
+      <section className="panel">
+        {institutions.error && <Message tone="error">{institutions.error}</Message>}
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Institución</th><th>Administradores</th><th /></tr>
+            </thead>
+            <tbody>
+              {institutions.data?.map((i) => (
+                <tr key={i.id}>
+                  <td>
+                    <strong>{i.name}</strong>
+                    <div className="muted small">{i.slug}</div>
+                  </td>
+                  <td>
+                    {i.school_admins === 0 ? <span className="badge warn">Ninguno</span> : <span className="num">{i.school_admins}</span>}
+                  </td>
+                  <td><AssignAdmin institution={i} onDone={institutions.reload} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {institutions.data?.length === 0 && <p className="empty">Aún no hay instituciones.</p>}
+      </section>
     </>
   );
 }

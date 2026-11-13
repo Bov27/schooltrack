@@ -6,6 +6,21 @@ All notable changes are listed here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- New visual identity for the dashboard and the app, from Popayán's white colonial
+  facades: lime-wash background, deep blue-green ink, chalkboard green for presence and
+  school-desk yellow for temporary exits.
+- Dashboard in Spanish, with a responsive sidebar (menu on small screens), new type
+  (Bricolage Grotesque and Atkinson Hyperlegible) and a "Pase de lista" home page that
+  shows every student's current state and refreshes every 30 seconds.
+- Mobile app with bottom tabs (Inicio, Historial, Avisos, Perfil), a home header in the
+  colour of the person's state, a large check-in button that pulses while locating,
+  haptic feedback, a day-grouped history and an unread badge for notices.
+
+### Added
+- `GET /api/v1/attendance/roster`: every active student with the current state and the
+  last event, for school admins and teachers.
+
 ### Planned after the MVP
 - Push notifications on phones (needs an Expo development build).
 - Holiday calendar for analytics, and a map editor for geofences.

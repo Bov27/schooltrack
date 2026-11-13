@@ -27,6 +27,10 @@ Sign in with an account that is linked to a student or staff record (register on
 - **Idempotency.** Each tap gets a UUID; network retries reuse it, so a request that reached the server
   is never recorded twice (the server answers 200 with the original event).
 - **Plain-language results.** Rejection and review reasons are explained in Spanish, with what to do next.
+- **Screens.** Four tabs: *Inicio* (state, the check-in button, students for guardians), *Historial*,
+  *Avisos* and *Perfil* (institution, password, sign out). `src/screens/useAppData.ts` holds the data and
+  actions they share. Icons come from `@expo/vector-icons`, insets from `react-native-safe-area-context`
+  and tap feedback from `expo-haptics`, all included in Expo Go.
 - `src/core` is platform-independent and unit-tested with vitest; `src/platform` adapts it to Expo APIs.
 - **Offline queue.** If an event cannot reach the server after the retries, it is saved in the OS keystore
   (one entry per event, at most 40) with its original time, location and idempotency key. The screen shows

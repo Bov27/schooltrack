@@ -74,6 +74,14 @@ export const EVENT_LABELS: Record<EventType, string> = {
   CHECK_OUT: "Registrar salida",
 };
 
+/** Confirmation shown after a validated event. */
+export const DONE_LABELS: Record<EventType, string> = {
+  CHECK_IN: "Entrada registrada",
+  TEMPORARY_CHECK_OUT: "Salida temporal registrada",
+  RETURN: "Regreso registrado",
+  CHECK_OUT: "Salida registrada",
+};
+
 /** Short names for the history list. */
 export const HISTORY_LABELS: Record<EventType, string> = {
   CHECK_IN: "Entrada",
@@ -91,8 +99,8 @@ export function ownHistoryPath(state: SubjectState | null, limit = 15): string |
 }
 
 export const STATE_LABELS: Record<AttendanceState, string> = {
-  OUTSIDE: "Fuera de la institución",
-  PRESENT: "En la institución",
+  OUTSIDE: "Fuera del colegio",
+  PRESENT: "En el colegio",
   TEMPORARY_EXIT: "Salida temporal",
 };
 
@@ -119,7 +127,7 @@ export function describeOutcome(event: AttendanceEvent, replay: boolean): Outcom
   if (replay) details.unshift("Este registro ya se había enviado; no se duplicó.");
   switch (event.validation_status) {
     case "VALIDATED":
-      return { tone: "ok", title: `${EVENT_LABELS[event.event_type]}: listo`, details };
+      return { tone: "ok", title: DONE_LABELS[event.event_type], details };
     case "FLAGGED_FOR_REVIEW":
     case "PENDING":
       return { tone: "warn", title: "Registrado, pendiente de revisión", details };
@@ -144,4 +152,12 @@ export async function withRetries<T>(
       await delay(attempt);
     }
   }
+}
+
+const ACTION_PRIORITY: EventType[] = ["CHECK_IN", "RETURN", "CHECK_OUT", "TEMPORARY_CHECK_OUT"];
+
+/** The big button gets the most common next action; the rest are smaller buttons. */
+export function splitActions(allowed: EventType[]): { primary: EventType | null; secondary: EventType[] } {
+  const ordered = ACTION_PRIORITY.filter((event) => allowed.includes(event));
+  return { primary: ordered[0] ?? null, secondary: ordered.slice(1) };
 }

@@ -115,6 +115,16 @@ class OfflineBatchResult(BaseModel):
     results: list[BatchItemOut]
 
 
+class RosterEntryOut(BaseModel):
+    student_id: uuid.UUID
+    full_name: str
+    student_code: str
+    state: AttendanceState
+    last_event_type: EventType | None
+    last_event_at: datetime | None
+    last_validation_status: ValidationStatus | None
+
+
 class GuardedStudentOut(BaseModel):
     student_id: uuid.UUID
     full_name: str

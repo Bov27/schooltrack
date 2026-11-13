@@ -299,6 +299,29 @@ class AttendanceRepository:
         )
         return value
 
+    async def roster(self, institution_id: uuid.UUID) -> list[dict[str, Any]]:
+        """Every active student with the current state and the last event, in one query."""
+        result = await self.session.execute(
+            text(
+                """
+                SELECT s.id AS student_id, s.full_name, s.student_code,
+                       COALESCE(st.current_state::text, 'OUTSIDE') AS state,
+                       e.event_type::text AS last_event_type,
+                       e.occurred_at AS last_event_at,
+                       e.validation_status::text AS last_validation_status
+                FROM students s
+                LEFT JOIN attendance_subject_states st
+                       ON st.institution_id = s.institution_id AND st.student_id = s.id
+                LEFT JOIN attendance_events e
+                       ON e.institution_id = st.institution_id AND e.id = st.last_event_id
+                WHERE s.institution_id = :inst AND s.is_active
+                ORDER BY s.full_name
+                """
+            ),
+            {"inst": institution_id},
+        )
+        return [dict(row) for row in result.mappings()]
+
     async def current_state(
         self, institution_id: uuid.UUID, subject: Subject
     ) -> LockedState:

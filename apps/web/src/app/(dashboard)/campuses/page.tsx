@@ -2,9 +2,10 @@
 
 import { type FormEvent, useState } from "react";
 
-import { AdminOnly, StatusBadge, useSession } from "@/components/Shell";
+import { Icon } from "@/components/Icon";
+import { AdminOnly, Message, PageHead, StatusBadge, useSession } from "@/components/Shell";
 import { api, useApi } from "@/lib/client";
-import { formatArea, parseLatLng, reasonLabel } from "@/lib/format";
+import { formatArea, parseLatLng, reasonLabel, statusLabel } from "@/lib/format";
 import type { Campus, Geofence, LocationVerdict } from "@/lib/types";
 
 function useFormAction() {
@@ -39,7 +40,7 @@ function GeofenceForm({ campus, onCreated }: { campus: Campus; onCreated: () => 
       const body: Record<string, unknown> = { campus_id: campus.id, name: String(form.get("name")) };
       if (mode === "circle") {
         const center = parseLatLng(String(form.get("center")));
-        if (!center) throw new Error("Centre must look like: 2.4419, -76.6063");
+        if (!center) throw new Error("El centro debe tener la forma: 2.4419, -76.6063");
         body.center = center;
         const radius = Number(form.get("radius"));
         if (radius > 0) body.radius_m = radius;
@@ -47,49 +48,49 @@ function GeofenceForm({ campus, onCreated }: { campus: Campus; onCreated: () => 
         try {
           body.area = JSON.parse(String(form.get("geojson")));
         } catch {
-          throw new Error("The polygon must be valid GeoJSON");
+          throw new Error("El polígono debe ser GeoJSON válido");
         }
       }
       await api<Geofence>("geofences", { method: "POST", body: JSON.stringify(body) });
       target.reset();
       onCreated();
-      return "Geofence created";
+      return "Geocerca creada";
     });
   }
 
   return (
     <form className="inline" onSubmit={submit}>
-      {action.error && <div className="error" style={{ width: "100%" }}>{action.error}</div>}
-      {action.message && <div className="success" style={{ width: "100%" }}>{action.message}</div>}
+      {action.error && <div style={{ width: "100%" }}><Message tone="error">{action.error}</Message></div>}
+      {action.message && <div style={{ width: "100%" }}><Message tone="success">{action.message}</Message></div>}
       <label>
-        Name
+        Nombre
         <input name="name" required defaultValue="Perímetro" />
       </label>
       <label>
-        Shape
+        Forma
         <select value={mode} onChange={(e) => setMode(e.target.value as "circle" | "polygon")}>
-          <option value="circle">Centre + radius</option>
-          <option value="polygon">GeoJSON polygon</option>
+          <option value="circle">Centro y radio</option>
+          <option value="polygon">Polígono GeoJSON</option>
         </select>
       </label>
       {mode === "circle" ? (
         <>
           <label>
-            Centre (lat, lng)
+            Centro <span className="hint">(lat, lng desde Google Maps)</span>
             <input name="center" placeholder="2.4419, -76.6063" required />
           </label>
           <label>
-            Radius (m)
+            Radio en metros
             <input name="radius" type="number" min={10} max={5000} placeholder="100" />
           </label>
         </>
       ) : (
         <label style={{ flex: "1 1 100%" }}>
-          GeoJSON polygon ([lng, lat] positions)
+          Polígono GeoJSON <span className="hint">(posiciones [lng, lat])</span>
           <textarea name="geojson" required placeholder='{"type":"Polygon","coordinates":[[[-76.607,2.441], …]]}' />
         </label>
       )}
-      <button type="submit" disabled={action.busy}>Add geofence</button>
+      <button type="submit" disabled={action.busy}>Crear geocerca</button>
     </form>
   );
 }
@@ -103,7 +104,7 @@ function LocationTester({ campus }: { campus: Campus }) {
     const form = new FormData(event.currentTarget);
     void action.run(async () => {
       const point = parseLatLng(String(form.get("point")));
-      if (!point) throw new Error("Point must look like: 2.4419, -76.6063");
+      if (!point) throw new Error("El punto debe tener la forma: 2.4419, -76.6063");
       const result = await api<LocationVerdict>("geofences/check", {
         method: "POST",
         body: JSON.stringify({
@@ -119,23 +120,27 @@ function LocationTester({ campus }: { campus: Campus }) {
 
   return (
     <form className="inline" onSubmit={submit}>
-      {action.error && <div className="error" style={{ width: "100%" }}>{action.error}</div>}
+      {action.error && <div style={{ width: "100%" }}><Message tone="error">{action.error}</Message></div>}
       <label>
-        Test a point (lat, lng)
+        Punto <span className="hint">(lat, lng)</span>
         <input name="point" placeholder="2.4419, -76.6063" required />
       </label>
       <label>
-        GPS accuracy (m)
+        Precisión del GPS en metros
         <input name="accuracy" type="number" min={0} defaultValue={10} />
       </label>
-      <button type="submit" className="secondary" disabled={action.busy}>Check (nothing is stored)</button>
+      <button type="submit" className="secondary" disabled={action.busy}>Probar punto</button>
       {verdict && (
-        <div style={{ width: "100%" }}>
-          <StatusBadge status={verdict.verdict} /> {verdict.geofence_result.toLowerCase()}
-          {verdict.distance_m !== null && verdict.distance_m > 0 && ` · ${verdict.distance_m} m from the edge`}
-          {verdict.reasons.length > 0 && (
-            <span className="muted"> · {verdict.reasons.map(reasonLabel).join("; ")}</span>
+        <div className="verdict" role="status">
+          <StatusBadge status={verdict.verdict} />
+          <strong>{statusLabel(verdict.geofence_result)} de la geocerca</strong>
+          {verdict.distance_m !== null && verdict.distance_m > 0 && (
+            <span className="muted">a {Math.round(verdict.distance_m)} m del borde</span>
           )}
+          {verdict.reasons.length > 0 && (
+            <span className="muted">{verdict.reasons.map(reasonLabel).join(". ")}</span>
+          )}
+          <span className="muted small">No se guarda nada.</span>
         </div>
       )}
     </form>
@@ -168,71 +173,82 @@ function GeofenceActions({ geofence, onChanged }: { geofence: Geofence; onChange
     );
 
   const remove = () => {
-    if (!window.confirm(`Delete geofence "${geofence.name}"? This cannot be undone.`)) return;
+    if (!window.confirm(`¿Eliminar la geocerca "${geofence.name}"? No se puede deshacer.`)) return;
     void run(() => api(`geofences/${geofence.id}`, { method: "DELETE" }));
   };
 
   return (
-    <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-      <button className="secondary" disabled={busy} onClick={() => void toggle()}>
-        {geofence.is_active ? "Deactivate" : "Activate"}
+    <>
+      <button className="secondary small" disabled={busy} onClick={() => void toggle()}>
+        {geofence.is_active ? "Desactivar" : "Activar"}
       </button>
-      <button className="danger" disabled={busy} onClick={remove}>
-        Delete
+      <button className="danger small" disabled={busy} onClick={remove}>
+        Eliminar
       </button>
-      {error && <span className="error">{error}</span>}
-    </span>
+      {error && <div className="error small">{error}</div>}
+    </>
   );
 }
 
 function CampusCard({ campus }: { campus: Campus }) {
   const { isAdmin } = useSession();
   const geofences = useApi<Geofence[]>(`geofences?campus_id=${campus.id}`);
+  const noneActive = geofences.data !== undefined && !geofences.data.some((g) => g.is_active);
   return (
-    <div className="panel">
-      <h3>{campus.name}</h3>
-      <p className="muted">{campus.address ?? "No address"} · {campus.timezone ?? "institution timezone"}</p>
-      {geofences.error && <div className="error">{geofences.error}</div>}
-      <table>
-        <thead>
-          <tr><th>Geofence</th><th>Area</th><th>Status</th>{isAdmin && <th />}</tr>
-        </thead>
-        <tbody>
-          {geofences.data?.map((g) => (
-            <tr key={g.id}>
-              <td>{g.name}</td>
-              <td>{formatArea(g.area_m2)}</td>
-              <td>
-                <span className={`badge ${g.is_active ? "ok" : "neutral"}`}>{g.is_active ? "active" : "inactive"}</span>
-              </td>
-              {isAdmin && (
-                <td>
-                  <GeofenceActions geofence={g} onChanged={geofences.reload} />
-                </td>
-              )}
-            </tr>
-          ))}
-          {geofences.data?.length === 0 && (
-            <tr><td colSpan={4} className="muted">No geofence yet: attendance on this campus will be rejected.</td></tr>
-          )}
-        </tbody>
-      </table>
-      {geofences.data && geofences.data.length > 0 && geofences.data.every((g) => !g.is_active) && (
-        <div className="error" style={{ marginTop: 10 }}>
-          Every geofence of this campus is inactive: attendance here will be rejected.
+    <section className="panel">
+      <div className="panel-head">
+        <div>
+          <h2>{campus.name}</h2>
+          <p className="muted">
+            {campus.address ?? "Sin dirección"}
+            {campus.timezone ? `, ${campus.timezone}` : ""}
+          </p>
+        </div>
+      </div>
+      {geofences.error && <Message tone="error">{geofences.error}</Message>}
+      {noneActive && (
+        <Message tone="notice">
+          Esta sede no tiene ninguna geocerca activa: la asistencia registrada aquí se va a rechazar.
+        </Message>
+      )}
+      {geofences.data && geofences.data.length > 0 && (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Geocerca</th><th>Área</th><th>Estado</th>{isAdmin && <th />}</tr>
+            </thead>
+            <tbody>
+              {geofences.data.map((g) => (
+                <tr key={g.id}>
+                  <td><strong>{g.name}</strong></td>
+                  <td className="num">{formatArea(g.area_m2)}</td>
+                  <td>
+                    <span className={`badge ${g.is_active ? "ok" : "neutral"}`}>{g.is_active ? "Activa" : "Inactiva"}</span>
+                  </td>
+                  {isAdmin && (
+                    <td className="actions">
+                      <GeofenceActions geofence={g} onChanged={geofences.reload} />
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-      <p className="muted">
-        A geofence that already validated attendance cannot be deleted (it is evidence for those events);
-        deactivate it instead.
-      </p>
+      {isAdmin && (
+        <p className="muted small" style={{ marginTop: 10 }}>
+          Una geocerca que ya validó asistencia no se puede eliminar, porque es la evidencia de esos registros.
+          En ese caso, desactívala.
+        </p>
+      )}
       <AdminOnly>
-        <h3 style={{ marginTop: 18 }}>Add a geofence</h3>
+        <h3 className="subhead">Nueva geocerca</h3>
         <GeofenceForm campus={campus} onCreated={geofences.reload} />
       </AdminOnly>
-      <h3 style={{ marginTop: 18 }}>Test a location</h3>
+      <h3 className="subhead">Probar una ubicación</h3>
       <LocationTester campus={campus} />
-    </div>
+    </section>
   );
 }
 
@@ -255,27 +271,34 @@ export default function CampusesPage() {
       });
       target.reset();
       campuses.reload();
-      return "Campus created";
+      return "Sede creada";
     });
   }
 
   return (
     <>
-      <h2>Campuses & geofences</h2>
+      <PageHead title="Sedes y geocercas">
+        La geocerca es el perímetro de la sede. Una entrada solo es válida si la ubicación del celular cae
+        dentro de ella.
+      </PageHead>
       <AdminOnly>
-        <div className="panel">
-          <h3>New campus</h3>
-          {action.error && <div className="error">{action.error}</div>}
-          {action.message && <div className="success">{action.message}</div>}
+        <details className="panel">
+          <summary>
+            Nueva sede
+            <Icon name="plus" />
+          </summary>
+          {action.error && <Message tone="error">{action.error}</Message>}
+          {action.message && <Message tone="success">{action.message}</Message>}
           <form className="inline" onSubmit={create}>
-            <label>Name<input name="name" required /></label>
-            <label>Address<input name="address" /></label>
-            <label>Timezone<input name="timezone" placeholder="America/Bogota" /></label>
-            <button type="submit" disabled={action.busy}>Create</button>
+            <label>Nombre<input name="name" required placeholder="Sede Principal" /></label>
+            <label>Dirección<input name="address" /></label>
+            <label>Zona horaria<input name="timezone" placeholder="America/Bogota" /></label>
+            <button type="submit" disabled={action.busy}>Crear sede</button>
           </form>
-        </div>
+        </details>
       </AdminOnly>
-      {campuses.error && <div className="error">{campuses.error}</div>}
+      {campuses.error && <Message tone="error">{campuses.error}</Message>}
+      {campuses.data?.length === 0 && <p className="empty">Aún no hay sedes.</p>}
       {campuses.data?.map((campus) => <CampusCard key={campus.id} campus={campus} />)}
     </>
   );

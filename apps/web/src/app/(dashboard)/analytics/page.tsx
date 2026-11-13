@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react";
 
-import { useSession } from "@/components/Shell";
+import { Icon } from "@/components/Icon";
+import { Message, PageHead, useSession } from "@/components/Shell";
 import { getInstitution, useApi } from "@/lib/client";
-import { defaultRange, formatRate } from "@/lib/format";
+import { defaultRange, formatRate, initials } from "@/lib/format";
 import type { Campus } from "@/lib/types";
 
 interface StudentRow {
@@ -30,9 +31,21 @@ interface Report {
   days: { day: string; students_present: number }[];
 }
 
+function rateColor(rate: number | null): string {
+  if (rate === null) return "#cdd2cb";
+  if (rate >= 0.9) return "var(--pizarra)";
+  if (rate >= 0.75) return "var(--pupitre)";
+  return "var(--lacre)";
+}
+
+function dayLabel(iso: string): string {
+  const date = new Date(`${iso}T12:00:00`);
+  return new Intl.DateTimeFormat("es-CO", { weekday: "short", day: "numeric" }).format(date);
+}
+
 export default function AnalyticsPage() {
-  const { isAdmin, membership } = useSession();
-  const allowed = isAdmin || (membership?.roles.includes("TEACHER") ?? false);
+  const { isAdmin, isTeacher } = useSession();
+  const allowed = isAdmin || isTeacher;
   const initial = useMemo(() => defaultRange(new Date()), []);
   const [from, setFrom] = useState(initial.from);
   const [to, setTo] = useState(initial.to);
@@ -43,7 +56,7 @@ export default function AnalyticsPage() {
   const report = useApi<Report>(allowed ? `analytics/attendance?${query}` : null);
   const campuses = useApi<Campus[]>(allowed ? "campuses" : null);
 
-  if (!allowed) return <div className="panel muted">Only school administrators and teachers can see analytics.</div>;
+  if (!allowed) return <Message tone="notice">Solo la administración y los docentes ven las analíticas.</Message>;
 
   async function downloadCsv() {
     setDownloadError(null);
@@ -52,90 +65,125 @@ export default function AnalyticsPage() {
     if (institution) headers["x-institution-id"] = institution;
     const response = await fetch(`/api/backend/analytics/attendance.csv?${query}`, { headers });
     if (!response.ok) {
-      setDownloadError(`Export failed (${response.status})`);
+      setDownloadError(`No se pudo descargar el archivo (error ${response.status}).`);
       return;
     }
     const url = URL.createObjectURL(await response.blob());
     const link = document.createElement("a");
     link.href = url;
-    link.download = `attendance_${from}_${to}.csv`;
+    link.download = `asistencia_${from}_${to}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
 
-  const maxPresent = Math.max(1, ...(report.data?.days.map((d) => d.students_present) ?? [1]));
+  const data = report.data;
+  const maxPresent = Math.max(1, ...(data?.days.map((d) => d.students_present) ?? [1]));
+  const sorted = [...(data?.students ?? [])].sort(
+    (a, b) => (a.attendance_rate ?? 2) - (b.attendance_rate ?? 2) || a.full_name.localeCompare(b.full_name),
+  );
 
   return (
     <>
-      <h2>Analytics</h2>
-      <div className="panel">
-        <form className="inline" onSubmit={(e) => e.preventDefault()}>
-          <label>From<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
-          <label>To<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
-          <label>
-            Campus
-            <select value={campus} onChange={(e) => setCampus(e.target.value)}>
-              <option value="">All campuses</option>
-              {campuses.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </label>
-          <button type="button" className="secondary" onClick={() => void downloadCsv()}>Download CSV</button>
-        </form>
-        {downloadError && <div className="error" style={{ marginTop: 10 }}>{downloadError}</div>}
-        <p className="muted">
-          School days are Monday to Friday in the institution&apos;s timezone. A student counts as present on a
-          day with an accepted check-in (validated or under review; rejected attempts do not count).
-        </p>
-      </div>
-      {report.error && <div className="error">{report.error}</div>}
-      {report.data && (
+      <PageHead
+        title="Analíticas"
+        actions={
+          <button type="button" className="secondary" onClick={() => void downloadCsv()}>
+            <Icon name="download" size={18} />
+            Descargar CSV
+          </button>
+        }
+      >
+        Días hábiles de lunes a viernes en la zona horaria de la institución. Cuenta como presente quien tiene
+        una entrada aceptada ese día; los intentos rechazados no cuentan.
+      </PageHead>
+
+      <form className="inline" onSubmit={(e) => e.preventDefault()} style={{ marginBottom: 24 }}>
+        <label>Desde<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label>Hasta<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+        <label>
+          Sede
+          <select value={campus} onChange={(e) => setCampus(e.target.value)}>
+            <option value="">Todas las sedes</option>
+            {campuses.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+      </form>
+      {downloadError && <Message tone="error">{downloadError}</Message>}
+      {report.error && <Message tone="error">{report.error}</Message>}
+
+      {data && (
         <>
-          <div className="grid">
-            <div className="panel"><div className="muted">School days</div><div className="stat">{report.data.school_days}</div></div>
-            <div className="panel"><div className="muted">Overall attendance</div><div className="stat">{formatRate(report.data.overall_rate)}</div></div>
-            <div className="panel"><div className="muted">Students</div><div className="stat">{report.data.students.length}</div></div>
+          <div className="stat-line">
+            <div><b className="num">{formatRate(data.overall_rate)}</b><span>asistencia general</span></div>
+            <div><b className="num">{data.school_days}</b><span>días hábiles</span></div>
+            <div><b className="num">{data.students.length}</b><span>estudiantes</span></div>
           </div>
-          <div className="panel">
-            <h3>Students present per day</h3>
-            <div style={{ display: "flex", gap: 8, alignItems: "flex-end", height: 140 }}>
-              {report.data.days.map((d) => (
-                <div key={d.day} style={{ flex: 1, textAlign: "center" }} title={`${d.day}: ${d.students_present}`}>
-                  <div style={{ background: "var(--accent)", borderRadius: 4, height: `${(d.students_present / maxPresent) * 100}px` }} />
-                  <div className="muted" style={{ fontSize: 11 }}>{d.day.slice(5)}</div>
-                  <div style={{ fontSize: 12 }}>{d.students_present}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="panel">
-            <h3>Per student</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Code</th><th>Name</th><th>Days present</th><th>Rate</th><th>Avg. first check-in</th>
-                  <th>Flagged</th><th>Rejected</th><th>Manual</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.data.students.map((s) => (
-                  <tr key={s.student_id}>
-                    <td>{s.student_code}</td>
-                    <td>{s.full_name}</td>
-                    <td>{s.days_present} / {s.school_days}</td>
-                    <td>
-                      <span className={`badge ${s.attendance_rate === null ? "neutral" : s.attendance_rate >= 0.9 ? "ok" : s.attendance_rate >= 0.75 ? "warn" : "bad"}`}>
-                        {formatRate(s.attendance_rate)}
-                      </span>
-                    </td>
-                    <td>{s.average_first_check_in ?? "–"}</td>
-                    <td>{s.flagged_events}</td>
-                    <td>{s.rejected_events}</td>
-                    <td>{s.manual_events}</td>
-                  </tr>
+
+          <section className="panel">
+            <div className="panel-head"><h2>Estudiantes presentes por día</h2></div>
+            {data.days.length === 0 ? (
+              <p className="empty">No hay días hábiles en este rango.</p>
+            ) : (
+              <div className="bars" role="list">
+                {data.days.map((d, i) => (
+                  <div key={d.day} className="bar" role="listitem" aria-label={`${dayLabel(d.day)}: ${d.students_present}`}>
+                    <span className="bar-value num">{d.students_present}</span>
+                    <span
+                      className="bar-fill"
+                      style={{ height: `${(d.students_present / maxPresent) * 130}px`, animationDelay: `${i * 40}ms` }}
+                    />
+                    <span className="bar-label">{dayLabel(d.day)}</span>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </div>
+            )}
+          </section>
+
+          <section className="panel">
+            <div className="panel-head">
+              <h2>Por estudiante</h2>
+              <span className="muted small">De menor a mayor asistencia</span>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Estudiante</th><th>Días presente</th><th>Asistencia</th><th>Llegada promedio</th>
+                    <th>Por revisar</th><th>Rechazados</th><th>Manuales</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sorted.map((s) => (
+                    <tr key={s.student_id}>
+                      <td>
+                        <span className="person">
+                          <span className="avatar">{initials(s.full_name)}</span>
+                          <span>
+                            <strong>{s.full_name}</strong>
+                            <div className="muted small">{s.student_code}</div>
+                          </span>
+                        </span>
+                      </td>
+                      <td className="num">{s.days_present} de {s.school_days}</td>
+                      <td>
+                        <span className="rate">
+                          <span className="rate-track">
+                            <span style={{ width: `${(s.attendance_rate ?? 0) * 100}%`, background: rateColor(s.attendance_rate) }} />
+                          </span>
+                          <strong className="num">{formatRate(s.attendance_rate)}</strong>
+                        </span>
+                      </td>
+                      <td className="num">{s.average_first_check_in ?? "–"}</td>
+                      <td className="num">{s.flagged_events || "–"}</td>
+                      <td className="num">{s.rejected_events || "–"}</td>
+                      <td className="num">{s.manual_events || "–"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {sorted.length === 0 && <p className="empty">No hay estudiantes registrados.</p>}
+          </section>
         </>
       )}
     </>

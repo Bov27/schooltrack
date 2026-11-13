@@ -1,10 +1,12 @@
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Platform, SafeAreaView, StyleSheet } from "react-native";
+import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { api, installationId } from "./src/platform/services";
-import { HomeScreen } from "./src/screens/HomeScreen";
 import { LoginScreen } from "./src/screens/LoginScreen";
+import { MainScreen } from "./src/screens/MainScreen";
+import { colors } from "./src/screens/theme";
 
 type Phase = "starting" | "signed-out" | "signed-in";
 
@@ -17,7 +19,7 @@ async function registerDevice(): Promise<void> {
         installation_id: await installationId(),
         platform: Platform.OS === "ios" ? "IOS" : "ANDROID",
         model: String((Platform.constants as { Model?: string }).Model ?? Platform.OS).slice(0, 100),
-        app_version: "0.1.0",
+        app_version: "0.2.0",
       },
     })
     .catch(() => undefined);
@@ -34,30 +36,36 @@ export default function App() {
   }, []);
 
   return (
-    <SafeAreaView style={styles.root}>
-      <StatusBar style="dark" />
-      {phase === "starting" && <ActivityIndicator style={styles.center} size="large" />}
-      {phase === "signed-out" && (
-        <LoginScreen
-          onSignedIn={() => {
-            void registerDevice();
-            setPhase("signed-in");
-          }}
-        />
-      )}
-      {phase === "signed-in" && (
-        <HomeScreen
-          onSignedOut={() => {
-            void api.logout();
-            setPhase("signed-out");
-          }}
-        />
-      )}
-    </SafeAreaView>
+    <SafeAreaProvider>
+      <View style={styles.root}>
+        {phase === "starting" && (
+          <View style={styles.splash}>
+            <StatusBar style="light" />
+            <ActivityIndicator size="large" color={colors.pupitre} />
+          </View>
+        )}
+        {phase === "signed-out" && (
+          <LoginScreen
+            onSignedIn={() => {
+              void registerDevice();
+              setPhase("signed-in");
+            }}
+          />
+        )}
+        {phase === "signed-in" && (
+          <MainScreen
+            onSignedOut={() => {
+              void api.logout();
+              setPhase("signed-out");
+            }}
+          />
+        )}
+      </View>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#f6f7f9" },
-  center: { flex: 1 },
+  root: { flex: 1, backgroundColor: colors.cal },
+  splash: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.tinta },
 });

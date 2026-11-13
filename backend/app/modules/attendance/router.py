@@ -2,9 +2,16 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 
-from app.api.deps import SchoolAdminDep, SessionDep, SettingsDep, TenantContext, TenantDep
+from app.api.deps import (
+    SchoolAdminDep,
+    SessionDep,
+    SettingsDep,
+    TenantContext,
+    TenantDep,
+    require_roles,
+)
 from app.api.errors import error_responses
 from app.modules.attendance.schemas import (
     AttendanceEventCreate,
@@ -16,6 +23,7 @@ from app.modules.attendance.schemas import (
     OfflineBatch,
     OfflineBatchResult,
     ReviewDecision,
+    RosterEntryOut,
     SubjectStateOut,
     ValidationStatus,
 )
@@ -211,6 +219,24 @@ async def sync_offline_events(
             for r in results
         ]
     )
+
+
+@router.get(
+    "/roster",
+    response_model=list[RosterEntryOut],
+    responses=error_responses(401, 403),
+)
+async def roster(
+    tenant: Annotated[
+        TenantContext,
+        Depends(require_roles(InstitutionRole.SCHOOL_ADMIN, InstitutionRole.TEACHER)),
+    ],
+    session: SessionDep,
+    settings: SettingsDep,
+) -> list[RosterEntryOut]:
+    """Roll call: every active student and where they are now (School Admins and teachers)."""
+    rows = await AttendanceService(session, settings).roster(tenant.institution_id)
+    return [RosterEntryOut(**row) for row in rows]
 
 
 @router.get(
