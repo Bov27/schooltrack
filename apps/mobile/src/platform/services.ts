@@ -5,8 +5,9 @@ import * as SecureStore from "expo-secure-store";
 
 import { ApiClient, type SecureStorage } from "../core/api";
 import type { Fix } from "../core/attendance";
+import { OfflineQueue } from "../core/offline";
 
-const secureStorage: SecureStorage = {
+export const secureStorage: SecureStorage = {
   get: (key) => SecureStore.getItemAsync(key),
   set: (key, value) => SecureStore.setItemAsync(key, value),
   remove: (key) => SecureStore.deleteItemAsync(key),
@@ -20,6 +21,9 @@ export const api = new ApiClient({
   fetch: (input, init) => fetch(input, init),
   storage: secureStorage,
 });
+
+/** Events recorded without connectivity, encrypted in the OS keystore until synced. */
+export const offlineQueue = new OfflineQueue(secureStorage);
 
 export function newIdempotencyKey(): string {
   return Crypto.randomUUID();

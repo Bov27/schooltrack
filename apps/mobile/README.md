@@ -28,3 +28,19 @@ Sign in with an account that is linked to a student or staff record (register on
   is never recorded twice (the server answers 200 with the original event).
 - **Plain-language results.** Rejection and review reasons are explained in Spanish, with what to do next.
 - `src/core` is platform-independent and unit-tested with vitest; `src/platform` adapts it to Expo APIs.
+- **Offline queue.** If an event cannot reach the server after the retries, it is saved in the OS keystore
+  (one entry per event, at most 40) with its original time, location and idempotency key. The screen shows
+  the predicted state and a pending count. The queue is sent to `POST /attendance/events/sync` on the
+  next load or pull-to-refresh. Accepted, replayed and refused (4xx) events leave the queue; server
+  errors (5xx) stay for the next attempt. The server applies the location rules at the time the event
+  happened and refuses events older than 72 hours.
+- **Guardians and notices.** A guardian account sees its students' current state and the in-app notices
+  (`GET /notifications`); tapping a notice marks it as read.
+- **Password change.** `POST /users/me/password` signs out every session, so the app returns to login.
+
+## Push notifications
+
+Push tokens are not registered yet. Expo Go no longer supports remote push on Android (SDK 53+), so
+registering an Expo push token needs a development build (`npx expo run:android` or an EAS build) and
+an EAS project id. The backend side is ready (`POST /devices` accepts a `push_token`; the worker has an Expo sender).
+Until then, notices are shown inside the app.
