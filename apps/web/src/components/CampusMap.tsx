@@ -64,6 +64,7 @@ export function CampusMap({
   draft,
   probe,
   onMapClick,
+  probeAccuracy,
   height = 420,
 }: {
   geofences: Geofence[];
@@ -71,7 +72,9 @@ export function CampusMap({
   mode: MapMode;
   draft: Draft;
   probe: MapPoint | null;
-  onMapClick: (position: LatLng) => void;
+  onMapClick?: (position: LatLng) => void;
+  /** GPS accuracy of the probe, in metres: drawn as a circle around it. */
+  probeAccuracy?: number | null;
   height?: number;
 }) {
   const container = useRef<HTMLDivElement>(null);
@@ -81,6 +84,8 @@ export function CampusMap({
   const layers = useRef<Record<"geofences" | "points" | "draft" | "probe", Leaflet.LayerGroup> | null>(null);
   const fitted = useRef(false);
   const clickHandler = useRef(onMapClick);
+  const probeRef = useRef(probe);
+  probeRef.current = probe;
   const [ready, setReady] = useState(false);
   const [base, setBase] = useState<BaseLayer>("satellite");
 
@@ -97,7 +102,7 @@ export function CampusMap({
         16,
       );
       instance.on("click", (event: Leaflet.LeafletMouseEvent) =>
-        clickHandler.current([event.latlng.lat, event.latlng.lng]),
+        clickHandler.current?.([event.latlng.lat, event.latlng.lng]),
       );
       // Scroll-zoom only after the person interacts with the map, so the page scrolls normally.
       instance.on("focus", () => instance.scrollWheelZoom.enable());
@@ -153,11 +158,12 @@ export function CampusMap({
         .bindTooltip(`${g.name}${g.is_active ? "" : " (inactiva)"}`, { sticky: true })
         .addTo(group);
     }
-    if (!fitted.current && geofences.length > 0) {
-      const bounds = L.latLngBounds(geofences.flatMap(ring));
+    const focus = probeRef.current?.position;
+    if (!fitted.current && (geofences.length > 0 || focus)) {
+      const bounds = L.latLngBounds([...geofences.flatMap(ring), ...(focus ? [focus] : [])]);
       if (bounds.isValid()) {
         map.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 18 });
-        fitted.current = true;
+        fitted.current = geofences.length > 0; // fit again once the geofences arrive
       }
     }
   }, [ready, geofences]);
@@ -217,6 +223,16 @@ export function CampusMap({
     const group = layers.current.probe;
     group.clearLayers();
     if (probe) {
+      if (probeAccuracy && probeAccuracy > 0) {
+        L.circle(probe.position, {
+          radius: probeAccuracy,
+          color: TONE_COLORS[probe.tone],
+          weight: 1,
+          fillColor: TONE_COLORS[probe.tone],
+          fillOpacity: 0.15,
+          interactive: false,
+        }).addTo(group);
+      }
       L.circleMarker(probe.position, {
         radius: 10,
         color: "#ffffff",
@@ -227,7 +243,7 @@ export function CampusMap({
         .bindTooltip(probe.label, { permanent: true, direction: "top", offset: [0, -10] })
         .addTo(group);
     }
-  }, [ready, probe]);
+  }, [ready, probe, probeAccuracy]);
 
   // Crosshair while the next click does something.
   useEffect(() => {
