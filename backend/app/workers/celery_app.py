@@ -10,7 +10,12 @@ import psycopg
 from celery import Celery
 
 from app.core.config import get_settings
-from app.workers.processing import deliver_notifications, dispatch_outbox
+from app.workers.processing import (
+    delete_processed_outbox,
+    deliver_notifications,
+    dispatch_outbox,
+    purge_expired_locations,
+)
 from app.workers.push import sender_for
 
 settings = get_settings()
@@ -24,6 +29,8 @@ app.conf.update(
     beat_schedule={
         "dispatch-outbox": {"task": "schooltrack.dispatch_outbox", "schedule": 5.0},
         "deliver-notifications": {"task": "schooltrack.deliver_notifications", "schedule": 10.0},
+        # Hourly is enough: batches are bounded and the work is idempotent.
+        "apply-retention": {"task": "schooltrack.apply_retention", "schedule": 3600.0},
     },
 )
 
@@ -49,3 +56,16 @@ def deliver_notifications_task() -> int:
             sender_for(settings.push_provider),
             max_attempts=settings.notification_max_attempts,
         )
+
+
+@app.task(name="schooltrack.apply_retention")
+def apply_retention_task() -> dict[str, int]:
+    with _connect() as conn:
+        purged = 0
+        while True:  # drain in bounded batches
+            batch = purge_expired_locations(conn, settings.location_retention_days)
+            purged += batch
+            if batch == 0:
+                break
+        outbox = delete_processed_outbox(conn, settings.outbox_retention_days)
+    return {"locations_purged": purged, "outbox_rows_deleted": outbox}
