@@ -73,13 +73,14 @@ const ROLE_LABELS: Record<string, string> = {
 /** The most relevant role first: an admin who also teaches is shown as an admin. */
 export function roleLabel(roles: string[]): string {
   const first = Object.keys(ROLE_LABELS).find((r) => roles.includes(r));
-  return first ? ROLE_LABELS[first] : "Miembro";
+  return (first && ROLE_LABELS[first]) || "Miembro";
 }
 
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
-  const letters = parts.length > 1 ? [parts[0], parts[parts.length - 1]] : parts;
-  return letters.map((p) => p[0]?.toUpperCase() ?? "").join("") || "?";
+  const first = parts[0] ?? "";
+  const last = parts.length > 1 ? (parts[parts.length - 1] ?? "") : "";
+  return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase() || "?";
 }
 
 export function formatTime(iso: string, timeZone = "America/Bogota"): string {

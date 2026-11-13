@@ -132,8 +132,9 @@ export function EmptyState({ icon, title, text }: { icon: IconName; title: strin
 
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
-  const letters = parts.length > 1 ? [parts[0], parts[parts.length - 1]] : parts;
-  return letters.map((p) => p[0]?.toUpperCase() ?? "").join("") || "?";
+  const first = parts[0] ?? "";
+  const last = parts.length > 1 ? (parts[parts.length - 1] ?? "") : "";
+  return `${first.charAt(0)}${last.charAt(0)}`.toUpperCase() || "?";
 }
 
 export function timeOf(iso: string): string {
