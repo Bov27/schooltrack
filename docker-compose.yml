@@ -57,5 +57,16 @@ services:
       timeout: 3s
       retries: 10
 
+  web:
+    build: ./apps/web
+    environment:
+      # Server-side only: the browser talks to the dashboard, never directly to the API.
+      SCHOOLTRACK_API_URL: http://api:8000
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+
 volumes:
   db-data:

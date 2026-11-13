@@ -1,0 +1,42 @@
+name: web-ci
+
+on:
+  push:
+    branches: [main]
+    paths: ["apps/web/**", ".github/workflows/web-ci.yml"]
+  pull_request:
+    paths: ["apps/web/**", ".github/workflows/web-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install (reproducible, from the committed lockfile)
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        if: ${{ !cancelled() }}
+        run: npm test
+
+      - name: Production build
+        if: ${{ !cancelled() }}
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
