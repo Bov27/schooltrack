@@ -68,6 +68,14 @@ bodies never carry `institution_id` (schemas use `extra="forbid"`).
 | POST | `/api/v1/geofences` | School Admin (Week 3) |
 | GET | `/api/v1/geofences` | any active member (Week 3) |
 | POST | `/api/v1/geofences/check` | any active member, dry run (Week 3) |
+| POST/GET | `/api/v1/students` | School Admin (create); admin or teacher (list) |
+| POST/GET | `/api/v1/staff` | School Admin |
+| POST/GET | `/api/v1/devices` | authenticated (own devices) |
+| POST | `/api/v1/attendance/events` | the student or staff member themselves |
+| GET | `/api/v1/attendance/events` | own events; School Admin sees all |
+| GET | `/api/v1/attendance/state` | the student or staff member themselves |
+| POST | `/api/v1/attendance/manual-events` | School Admin (audited) |
+| POST | `/api/v1/attendance/events/{id}/review` | School Admin (audited) |
 
 ## Bootstrapping the first Super Admin
 

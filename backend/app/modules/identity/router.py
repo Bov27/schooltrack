@@ -3,6 +3,8 @@ from fastapi import APIRouter, status
 from app.api.deps import CurrentUserDep, SessionDep, SettingsDep
 from app.api.errors import error_responses
 from app.modules.identity.schemas import (
+    DeviceOut,
+    DeviceRegister,
     LoginRequest,
     MembershipOut,
     MeResponse,
@@ -62,3 +64,27 @@ async def me(user: CurrentUserDep, session: SessionDep, settings: SettingsDep) -
             for m in memberships
         ],
     )
+
+
+@router.post("/devices", response_model=DeviceOut, responses=_401, tags=["devices"])
+async def register_device(
+    body: DeviceRegister, user: CurrentUserDep, session: SessionDep, settings: SettingsDep
+) -> DeviceOut:
+    """Register (or refresh) the calling user's device. Attendance events may reference
+    only the caller's own active devices."""
+    device = await IdentityService(session, settings).register_device(
+        user.id,
+        installation_id=body.installation_id,
+        platform=body.platform,
+        model=body.model,
+        app_version=body.app_version,
+    )
+    return DeviceOut.model_validate(device)
+
+
+@router.get("/devices", response_model=list[DeviceOut], responses=_401, tags=["devices"])
+async def list_devices(
+    user: CurrentUserDep, session: SessionDep, settings: SettingsDep
+) -> list[DeviceOut]:
+    devices = await IdentityService(session, settings).list_devices(user.id)
+    return [DeviceOut.model_validate(d) for d in devices]
