@@ -10,7 +10,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -180,6 +180,51 @@ class InstitutionService:
         await self.session.refresh(institution)
         await self.session.commit()
         return institution
+
+    async def list_all_institutions(self) -> list[tuple[Institution, int]]:
+        """Platform view: every institution with its number of active School Admins."""
+        admins = (
+            select(func.count())
+            .select_from(UserRole)
+            .join(
+                InstitutionMembership,
+                (InstitutionMembership.institution_id == UserRole.institution_id)
+                & (InstitutionMembership.user_id == UserRole.user_id),
+            )
+            .where(
+                UserRole.institution_id == Institution.id,
+                UserRole.role == InstitutionRole.SCHOOL_ADMIN,
+                InstitutionMembership.status == MembershipStatus.ACTIVE,
+            )
+            .scalar_subquery()
+        )
+        query = select(Institution, admins).order_by(Institution.name)
+        rows = (await self.session.execute(query)).all()
+        return [(institution, int(count)) for institution, count in rows]
+
+    async def add_school_admin(
+        self, institution_id: uuid.UUID, user_id: uuid.UUID, granted_by: uuid.UUID
+    ) -> None:
+        """Platform operation: make a user an active School Admin (idempotent)."""
+        await self.get_institution(institution_id)
+        await self.session.execute(
+            pg_insert(InstitutionMembership)
+            .values(institution_id=institution_id, user_id=user_id, status=MembershipStatus.ACTIVE)
+            .on_conflict_do_update(
+                index_elements=["institution_id", "user_id"],
+                set_={"status": MembershipStatus.ACTIVE},
+            )
+        )
+        await self.session.execute(
+            pg_insert(UserRole)
+            .values(
+                institution_id=institution_id,
+                user_id=user_id,
+                role=InstitutionRole.SCHOOL_ADMIN,
+                granted_by=granted_by,
+            )
+            .on_conflict_do_nothing()
+        )
 
     async def get_institution(self, institution_id: uuid.UUID) -> Institution:
         institution = await self.session.get(Institution, institution_id)

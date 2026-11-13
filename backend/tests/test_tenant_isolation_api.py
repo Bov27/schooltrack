@@ -188,3 +188,38 @@ def test_unknown_admin_email_is_reported(api: TestClient, world: World, factory:
         headers=auth(api, "root@schooltrack.test"),
     )
     assert response.status_code == 404
+
+
+def test_platform_admin_lists_all_institutions_and_assigns_an_admin(
+    api: TestClient, world: World, factory: Factory
+) -> None:
+    factory.platform_admin(factory.user("root@schooltrack.test"))
+    factory.user("nuevo.rector@colegio-b.test")
+    root = auth(api, "root@schooltrack.test")
+
+    listing = api.get("/api/v1/platform/institutions", headers=root).json()
+    assert [(i["slug"], i["school_admins"]) for i in listing] == [
+        ("colegio-a", 1),
+        ("colegio-b", 1),
+    ]
+
+    url = f"/api/v1/platform/institutions/{world.b}/admins"
+    body = {"user_email": "nuevo.rector@colegio-b.test"}
+    assert api.post(url, json=body, headers=root).status_code == 204
+    assert api.post(url, json=body, headers=root).status_code == 204  # idempotent
+    me = api.get("/api/v1/users/me", headers=auth(api, "nuevo.rector@colegio-b.test")).json()
+    assert [m["roles"] for m in me["memberships"]] == [["SCHOOL_ADMIN"]]
+
+    missing = api.post(url, json={"user_email": "ghost@x.test"}, headers=root)
+    assert missing.status_code == 404
+
+
+def test_school_admin_cannot_use_platform_endpoints(api: TestClient, world: World) -> None:
+    headers = auth(api, "admin@colegio-a.test")
+    assert api.get("/api/v1/platform/institutions", headers=headers).status_code == 403
+    response = api.post(
+        f"/api/v1/platform/institutions/{world.b}/admins",
+        json={"user_email": "admin@colegio-a.test"},
+        headers=headers,
+    )
+    assert response.status_code == 403

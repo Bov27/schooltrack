@@ -128,3 +128,13 @@ class GuardianLink(BaseModel):
     student_id: uuid.UUID
     relationship: str = Field(min_length=2, max_length=50, examples=["MOTHER", "LEGAL_GUARDIAN"])
     receives_alerts: bool = True
+
+
+class PlatformInstitutionOut(InstitutionOut):
+    school_admins: int
+
+
+class AdminAssign(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_email: str = Field(max_length=320)

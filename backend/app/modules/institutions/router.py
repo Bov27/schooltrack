@@ -22,8 +22,10 @@ from app.modules.institutions.schemas import (
     GuardianCreate,
     GuardianLink,
     GuardianOut,
+    AdminAssign,
     InstitutionCreate,
     InstitutionOut,
+    PlatformInstitutionOut,
     StaffCreate,
     StaffOut,
     StudentCreate,
@@ -72,6 +74,57 @@ async def create_institution(
         granted_by=admin.id,
     )
     return InstitutionOut.model_validate(institution)
+
+
+@router.get(
+    "/platform/institutions",
+    response_model=list[PlatformInstitutionOut],
+    responses=error_responses(401, 403),
+    tags=["institutions"],
+)
+async def list_all_institutions(
+    admin: PlatformAdminDep, platform_session: PlatformSessionDep
+) -> list[PlatformInstitutionOut]:
+    """Super Admin only: every institution, with its number of active School Admins."""
+    rows = await InstitutionService(platform_session).list_all_institutions()
+    return [
+        PlatformInstitutionOut(
+            **InstitutionOut.model_validate(institution).model_dump(), school_admins=count
+        )
+        for institution, count in rows
+    ]
+
+
+@router.post(
+    "/platform/institutions/{institution_id}/admins",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses=error_responses(401, 403, 404),
+    tags=["institutions"],
+)
+async def assign_school_admin(
+    institution_id: uuid.UUID,
+    body: AdminAssign,
+    request: Request,
+    admin: PlatformAdminDep,
+    platform_session: PlatformSessionDep,
+    settings: SettingsDep,
+) -> None:
+    """Super Admin only: make an existing account a School Admin of an institution."""
+    user_id = await IdentityService(platform_session, settings).find_user_id_by_email(
+        body.user_email
+    )
+    if user_id is None:
+        raise NotFoundError("No active user with that email")
+    await InstitutionService(platform_session).add_school_admin(institution_id, user_id, admin.id)
+    await AuditService(platform_session).record(
+        institution_id=institution_id,
+        actor_user_id=admin.id,
+        action="institution.school_admin_assigned",
+        entity_type="user",
+        entity_id=user_id,
+        request_id=getattr(request.state, "request_id", None),
+    )
+    await platform_session.commit()
 
 
 @router.get("/campuses", response_model=list[CampusOut], responses=_errors, tags=["campuses"])
