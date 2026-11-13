@@ -1,0 +1,44 @@
+name: mobile-ci
+
+on:
+  push:
+    branches: [main]
+    paths: ["apps/mobile/**", ".github/workflows/mobile-ci.yml"]
+  pull_request:
+    paths: ["apps/mobile/**", ".github/workflows/mobile-ci.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install (reproducible, from the committed lockfile)
+        run: npm ci
+
+      - name: Expo SDK version alignment
+        run: npx expo install --check
+
+      - name: Type check
+        if: ${{ !cancelled() }}
+        run: npm run typecheck
+
+      - name: Unit tests
+        if: ${{ !cancelled() }}
+        run: npm test
+
+      - name: Bundle (Android) to catch import and Metro errors
+        if: ${{ !cancelled() }}
+        run: npx expo export --platform android --output-dir /tmp/expo-export

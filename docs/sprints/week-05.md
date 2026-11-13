@@ -44,3 +44,35 @@ Week 5 ships in two pull requests: the admin dashboard (5a) and the mobile app (
   so the first CI run resolved the dependency tree. Its `package-lock.json`
   was then committed (Next 15.5.29, React 19.3.1), and CI and Docker now
   install with `npm ci`.
+
+## 5b: Mobile app (`apps/mobile`, Expo / React Native)
+
+### Delivered
+
+- [x] Login, with the session resumed on start. The access token stays in
+      memory and the refresh token is stored in the OS keystore.
+- [x] Single-flight token refresh. Two parallel refreshes with the same
+      token would trigger the server's reuse protection and log the user out.
+- [x] Current state and the actions allowed next, as returned by
+      `GET /attendance/state`. Campus and institution pickers when there is
+      more than one.
+- [x] Recording an attendance event:
+  - one high-accuracy fix, taken only when the user taps;
+  - a UUID idempotency key per tap, reused by network retries (exponential
+    backoff);
+  - the OS mock-location flag is forwarded;
+  - an unknown accuracy is sent as "very poor", never as precise.
+- [x] Results explained in Spanish (validated, in review, rejected), with
+      what to do next.
+- [x] History of the latest events, and device registration after login.
+- [x] Privacy:
+  - foreground location permission only;
+  - `ACCESS_BACKGROUND_LOCATION` is blocked in `app.json`;
+  - a visible note explains when the location is read.
+- [x] Tests: vitest for the platform-independent core (token handling,
+      payload building, outcomes, retries).
+- [x] CI (`mobile-ci`):
+  - Expo SDK version alignment (`expo install --check`);
+  - type check;
+  - unit tests;
+  - a full Android bundle export.
