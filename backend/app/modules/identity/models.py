@@ -65,6 +65,7 @@ class Device(Base):
     platform: Mapped[DevicePlatform] = mapped_column(pg_enum(DevicePlatform, "device_platform"))
     model: Mapped[str | None]
     app_version: Mapped[str | None]
+    push_token: Mapped[str | None]
     status: Mapped[DeviceStatus] = mapped_column(
         pg_enum(DeviceStatus, "device_status"), server_default=text("'ACTIVE'")
     )

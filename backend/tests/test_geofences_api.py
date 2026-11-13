@@ -284,3 +284,85 @@ def test_gist_index_is_used_for_geofence_lookups(owner_conn: Any, fenced: School
         "SELECT indexdef FROM pg_indexes WHERE tablename = 'geofences'"
     ).fetchall()
     assert any("USING gist (area)" in row[0] for row in indexes)
+
+
+# ---- managing geofences ---------------------------------------------------------------
+
+def test_deactivated_geofence_is_ignored_by_validation(api: TestClient, fenced: School) -> None:
+    admin = auth(api, "admin@colegio-a.test")
+    [geofence] = api.get("/api/v1/geofences", headers=admin).json()
+    off = api.patch(f"/api/v1/geofences/{geofence['id']}", json={"is_active": False}, headers=admin)
+    assert off.status_code == 200
+    assert off.json()["is_active"] is False
+    assert check(api, fenced)["reasons"] == ["NO_ACTIVE_GEOFENCE"]
+
+    on = api.patch(f"/api/v1/geofences/{geofence['id']}", json={"is_active": True}, headers=admin)
+    assert on.json()["is_active"] is True
+    assert check(api, fenced)["verdict"] == "VALIDATED"
+
+
+def test_rename_and_audit(api: TestClient, fenced: School, owner_conn: Any) -> None:
+    admin = auth(api, "admin@colegio-a.test")
+    [geofence] = api.get("/api/v1/geofences", headers=admin).json()
+    renamed = api.patch(
+        f"/api/v1/geofences/{geofence['id']}", json={"name": "Patio"}, headers=admin
+    )
+    assert renamed.json()["name"] == "Patio"
+    actions = owner_conn.execute(
+        "SELECT action FROM audit_logs WHERE entity_id = %s", (geofence["id"],)
+    ).fetchall()
+    assert actions == [("geofence.updated",)]
+
+
+def test_unused_geofence_can_be_deleted(api: TestClient, fenced: School) -> None:
+    admin = auth(api, "admin@colegio-a.test")
+    [geofence] = api.get("/api/v1/geofences", headers=admin).json()
+    assert api.delete(f"/api/v1/geofences/{geofence['id']}", headers=admin).status_code == 204
+    assert api.get("/api/v1/geofences", headers=admin).json() == []
+    assert api.delete(f"/api/v1/geofences/{geofence['id']}", headers=admin).status_code == 404
+
+
+def test_geofence_used_by_events_cannot_be_deleted(
+    api: TestClient, fenced: School, factory: Factory
+) -> None:
+    student = factory.user("ana@colegio-a.test")
+    factory.member(fenced.a, student, "STUDENT")
+    factory.student(fenced.a, "A-001", student)
+    now = datetime.now(UTC)
+    lat, lng = offset(0, 0)
+    recorded = api.post(
+        "/api/v1/attendance/events",
+        json={
+            "idempotency_key": str(uuid.uuid4()),
+            "event_type": "CHECK_IN",
+            "campus_id": str(fenced.campus_a),
+            "occurred_at": now.isoformat(),
+            "latitude": lat,
+            "longitude": lng,
+            "accuracy_m": 5,
+            "location_captured_at": now.isoformat(),
+        },
+        headers=auth(api, "ana@colegio-a.test"),
+    )
+    assert recorded.status_code == 201
+    admin = auth(api, "admin@colegio-a.test")
+    geofence_id = api.get("/api/v1/geofences", headers=admin).json()[0]["id"]
+    response = api.delete(f"/api/v1/geofences/{geofence_id}", headers=admin)
+    assert response.status_code == 409
+    assert "deactivate it instead" in response.json()["error"]["message"]
+
+
+def test_students_cannot_manage_geofences(api: TestClient, fenced: School) -> None:
+    [geofence] = api.get("/api/v1/geofences", headers=auth(api, "admin@colegio-a.test")).json()
+    student = auth(api, "student@colegio-a.test")
+    url = f"/api/v1/geofences/{geofence['id']}"
+    assert api.patch(url, json={"is_active": False}, headers=student).status_code == 403
+    assert api.delete(url, headers=student).status_code == 403
+
+
+def test_other_school_cannot_touch_the_geofence(api: TestClient, fenced: School) -> None:
+    [geofence] = api.get("/api/v1/geofences", headers=auth(api, "admin@colegio-a.test")).json()
+    other = auth(api, "admin@colegio-b.test")
+    url = f"/api/v1/geofences/{geofence['id']}"
+    assert api.patch(url, json={"is_active": False}, headers=other).status_code == 404
+    assert api.delete(url, headers=other).status_code == 404

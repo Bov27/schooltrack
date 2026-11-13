@@ -9,8 +9,12 @@ from app.api.errors import error_responses
 from app.modules.attendance.schemas import (
     AttendanceEventCreate,
     AttendanceEventOut,
+    BatchItemOut,
+    GuardedStudentOut,
     LocationOut,
     ManualEventCreate,
+    OfflineBatch,
+    OfflineBatchResult,
     ReviewDecision,
     SubjectStateOut,
     ValidationStatus,
@@ -18,6 +22,7 @@ from app.modules.attendance.schemas import (
 from app.modules.attendance.service import AttendanceService
 from app.modules.attendance.state_machine import allowed_events
 from app.modules.institutions.models import InstitutionRole
+from app.modules.institutions.service import InstitutionService, Subject, SubjectKind
 
 router = APIRouter(prefix="/attendance", tags=["attendance"])
 
@@ -120,7 +125,7 @@ async def list_events(
     service = AttendanceService(session, settings)
     admin = _is_admin(tenant)
     restrict_to = (
-        None if admin else await service.own_subjects(tenant.institution_id, tenant.user_id)
+        None if admin else await service.visible_subjects(tenant.institution_id, tenant.user_id)
     )
     events = await service.list_events(
         tenant.institution_id,
@@ -175,3 +180,61 @@ async def review_event(
         tenant.institution_id, tenant.user_id, event_id, body, request_id=_request_id(request)
     )
     return _out(event, with_location=True)
+
+
+@router.post(
+    "/events/sync",
+    response_model=OfflineBatchResult,
+    responses=error_responses(401, 403, 422),
+)
+async def sync_offline_events(
+    body: OfflineBatch, tenant: TenantDep, session: SessionDep, settings: SettingsDep
+) -> OfflineBatchResult:
+    """Upload events recorded while the phone had no connectivity (up to 50, any order).
+
+    They are applied oldest first, each with the same checks as a live event except
+    that the location rules are evaluated at the time the event happened. The answer
+    has one result per event; retrying the batch is safe (idempotency keys).
+    """
+    results = await AttendanceService(session, settings).sync_offline(
+        tenant.institution_id, tenant.user_id, body.events
+    )
+    return OfflineBatchResult(
+        results=[
+            BatchItemOut(
+                idempotency_key=r.idempotency_key,
+                outcome=r.outcome,
+                status_code=r.status_code,
+                event=None if r.event is None else _out(r.event, with_location=False),
+                error=r.error,
+            )
+            for r in results
+        ]
+    )
+
+
+@router.get(
+    "/guardian/students",
+    response_model=list[GuardedStudentOut],
+    responses=error_responses(401, 403),
+)
+async def guardian_students(
+    tenant: TenantDep, session: SessionDep, settings: SettingsDep
+) -> list[GuardedStudentOut]:
+    """For guardians: the students in their care and where each one is now."""
+    students = await InstitutionService(session).guarded_students(
+        tenant.institution_id, tenant.user_id
+    )
+    states = await AttendanceService(session, settings).current_states(
+        tenant.institution_id, [Subject(SubjectKind.STUDENT, s.id) for s in students]
+    )
+    return [
+        GuardedStudentOut(
+            student_id=student.id,
+            full_name=student.full_name,
+            student_code=student.student_code,
+            state=state,
+            last_event_id=last_event_id,
+        )
+        for student, (_, state, last_event_id) in zip(students, states, strict=True)
+    ]

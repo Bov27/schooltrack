@@ -79,12 +79,16 @@ class Factory:
             )
 
     def student(
-        self, institution_id: uuid.UUID, code: str, user_id: uuid.UUID | None = None
+        self,
+        institution_id: uuid.UUID,
+        code: str,
+        user_id: uuid.UUID | None = None,
+        name: str | None = None,
     ) -> uuid.UUID:
         return self._one(
             "INSERT INTO students (institution_id, student_code, full_name, user_id) "
             "VALUES (%s, %s, %s, %s) RETURNING id",
-            (institution_id, code, f"Estudiante {code}", user_id),
+            (institution_id, code, name or f"Estudiante {code}", user_id),
         )
 
     def staff(
@@ -103,6 +107,34 @@ class Factory:
             "INSERT INTO geofences (institution_id, campus_id, name, area) "
             "VALUES (%s, %s, %s, ST_GeogFromText(%s)) RETURNING id",
             (institution_id, campus_id, name, wkt),
+        )
+
+    def guardian(
+        self,
+        institution_id: uuid.UUID,
+        user_id: uuid.UUID,
+        student_id: uuid.UUID | None = None,
+        *,
+        receives_alerts: bool = True,
+    ) -> uuid.UUID:
+        guardian_id = self._one(
+            "INSERT INTO guardians (institution_id, user_id) VALUES (%s, %s) RETURNING id",
+            (institution_id, user_id),
+        )
+        if student_id is not None:
+            self.conn.execute(
+                "INSERT INTO student_guardians "
+                "(institution_id, student_id, guardian_id, relationship, receives_alerts) "
+                "VALUES (%s, %s, %s, 'MOTHER', %s)",
+                (institution_id, student_id, guardian_id, receives_alerts),
+            )
+        return guardian_id
+
+    def device(self, user_id: uuid.UUID, push_token: str | None) -> uuid.UUID:
+        return self._one(
+            "INSERT INTO devices (user_id, installation_id, platform, push_token) "
+            "VALUES (%s, %s, 'ANDROID', %s) RETURNING id",
+            (user_id, f"install-{uuid.uuid4()}", push_token),
         )
 
     def campus(self, institution_id: uuid.UUID, name: str) -> uuid.UUID:
@@ -124,8 +156,24 @@ def factory(owner_conn: psycopg.Connection[Any]) -> Factory:
     return Factory(owner_conn)
 
 
+def _clear_rate_limits() -> None:
+    url = os.environ.get("REDIS_URL")
+    if not url:
+        return
+    import redis
+
+    client = redis.Redis.from_url(url)
+    try:
+        keys = list(client.scan_iter("schooltrack:ratelimit:*"))
+        if keys:
+            client.delete(*keys)
+    finally:
+        client.close()
+
+
 @pytest.fixture
 def api(owner_conn: psycopg.Connection[Any]) -> Iterator[TestClient]:
+    _clear_rate_limits()
     settings = make_settings(
         database_url=os.environ["DATABASE_URL"],
         platform_database_url=os.environ["PLATFORM_DATABASE_URL"],

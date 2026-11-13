@@ -1,0 +1,8 @@
+# Keep LF line endings in the repository and in every checkout, including Windows.
+# Shell scripts and Dockerfiles run inside Linux containers and break with CRLF
+# ("bash\r: No such file or directory").
+* text=auto eol=lf
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.png binary
+*.jpg binary

@@ -116,3 +116,27 @@ class Staff(Base):
     staff_type: Mapped[StaffType] = mapped_column(pg_enum(StaffType, "staff_type"))
     is_active: Mapped[bool] = mapped_column(server_default=text("true"))
     created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+
+
+class Guardian(Base):
+    __tablename__ = "guardians"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, server_default=text("gen_random_uuid()")
+    )
+    institution_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("institutions.id"))
+    user_id: Mapped[uuid.UUID]
+    phone: Mapped[str | None]
+    created_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+
+
+class StudentGuardian(Base):
+    __tablename__ = "student_guardians"
+
+    institution_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    student_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    guardian_id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    relationship: Mapped[str]
+    receives_alerts: Mapped[bool] = mapped_column(server_default=text("true"))
+    authorized_at: Mapped[datetime] = mapped_column(server_default=text("now()"))
+    authorized_by: Mapped[uuid.UUID | None]

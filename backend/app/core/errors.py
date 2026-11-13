@@ -28,3 +28,11 @@ class ConflictError(DomainError):
 
 class ServiceUnavailableError(DomainError):
     status_code = 503
+
+
+class RateLimitedError(DomainError):
+    status_code = 429
+
+    def __init__(self, message: str, retry_after: int) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after

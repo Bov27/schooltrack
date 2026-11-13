@@ -95,3 +95,29 @@ class SubjectStateOut(BaseModel):
     state: AttendanceState
     allowed_events: list[EventType]
     last_event_id: uuid.UUID | None
+
+
+class OfflineBatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    events: list[AttendanceEventCreate] = Field(min_length=1, max_length=50)
+
+
+class BatchItemOut(BaseModel):
+    idempotency_key: uuid.UUID
+    outcome: Literal["created", "replayed", "error"]
+    status_code: int
+    event: AttendanceEventOut | None = None
+    error: str | None = None
+
+
+class OfflineBatchResult(BaseModel):
+    results: list[BatchItemOut]
+
+
+class GuardedStudentOut(BaseModel):
+    student_id: uuid.UUID
+    full_name: str
+    student_code: str
+    state: AttendanceState
+    last_event_id: uuid.UUID | None

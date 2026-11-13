@@ -9,9 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import ConflictError, DomainError, NotFoundError
+from app.modules.audit.service import AuditService
 from app.modules.geolocation.repository import GeofenceRepository
 from app.modules.geolocation.rules import GeoRules, LocationVerdict, evaluate_location
-from app.modules.geolocation.schemas import GeofenceCreate, LocationCheck
+from app.modules.geolocation.schemas import GeofenceCreate, GeofenceUpdate, LocationCheck
 
 
 class InvalidGeometryError(DomainError):
@@ -74,6 +75,72 @@ class GeolocationService:
             raise ConflictError(f"This campus already has a geofence named '{name}'") from exc
         await self.session.commit()
         return geofence
+
+    async def update_geofence(
+        self,
+        institution_id: uuid.UUID,
+        geofence_id: uuid.UUID,
+        body: GeofenceUpdate,
+        actor_id: uuid.UUID,
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
+        current = await self.repo.get(institution_id, geofence_id)
+        if current is None:
+            raise NotFoundError("Geofence not found")
+        name = body.name.strip() if body.name is not None else current["name"]
+        is_active = body.is_active if body.is_active is not None else current["is_active"]
+        try:
+            updated = await self.repo.update(
+                institution_id, geofence_id, name=name, is_active=is_active
+            )
+        except IntegrityError as exc:
+            await self.session.rollback()
+            raise ConflictError(f"This campus already has a geofence named '{name}'") from exc
+        await AuditService(self.session).record(
+            institution_id=institution_id,
+            actor_user_id=actor_id,
+            action="geofence.updated",
+            entity_type="geofence",
+            entity_id=geofence_id,
+            changes={
+                "name": [current["name"], name],
+                "is_active": [current["is_active"], is_active],
+            },
+            request_id=request_id,
+        )
+        await self.session.commit()
+        return updated
+
+    async def delete_geofence(
+        self,
+        institution_id: uuid.UUID,
+        geofence_id: uuid.UUID,
+        actor_id: uuid.UUID,
+        request_id: str | None = None,
+    ) -> None:
+        """Only never-used geofences can be deleted: attendance events reference the
+        geofence that validated them, and that evidence must stay intact."""
+        current = await self.repo.get(institution_id, geofence_id)
+        if current is None:
+            raise NotFoundError("Geofence not found")
+        used = await self.repo.usage_count(institution_id, geofence_id)
+        if used:
+            await self.session.rollback()
+            raise ConflictError(
+                f"This geofence validated {used} attendance event(s) and cannot be deleted; "
+                "deactivate it instead"
+            )
+        await self.repo.delete(institution_id, geofence_id)
+        await AuditService(self.session).record(
+            institution_id=institution_id,
+            actor_user_id=actor_id,
+            action="geofence.deleted",
+            entity_type="geofence",
+            entity_id=geofence_id,
+            changes={"name": current["name"], "area_m2": current["area_m2"]},
+            request_id=request_id,
+        )
+        await self.session.commit()
 
     async def list_geofences(
         self, institution_id: uuid.UUID, campus_id: uuid.UUID | None

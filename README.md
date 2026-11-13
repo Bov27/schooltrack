@@ -8,7 +8,7 @@ attendance state machine, and keeps an immutable, auditable history.
 Guardians and school administrators follow attendance from the web dashboard
 and through notifications.
 
-> **Status: Week 4 of 8, attendance engine.** This is a
+> **Status: Week 6 of 8, asynchronous processing and notifications.** This is a
 > portfolio project under active development. It is not production-ready and
 > must not be used with real personal data until its security, privacy and
 > operations have been independently validated.
@@ -69,8 +69,9 @@ docker compose exec api python -m app.cli create-platform-admin \
     --email admin@example.test --name "Platform Admin"
 ```
 
-If you started the stack before Week 2, recreate the database volume once with
-`docker compose down -v`, so the new `schooltrack_platform` role is created.
+If you started the stack before Week 6, recreate the database volume once with
+`docker compose down -v`, so the newer database roles (`schooltrack_platform`,
+`schooltrack_worker`) are created.
 Authentication and tenant selection are described in
 [docs/api/authentication.md](docs/api/authentication.md).
 
@@ -124,9 +125,9 @@ to run it on a phone with Expo Go. Business modules under
 | 2 | Authentication, roles, institutions, tenant isolation tests | ✅ |
 | 3 | Geofences and PostGIS validation | ✅ |
 | 4 | Attendance engine: state machine, idempotency, audit | ✅ |
-| 5 | Mobile app and admin dashboard | ⏳ |
-| 6 | Redis, Celery, notifications, offline sync | |
-| 7 | Analytics, security hardening, load testing | |
+| 5 | Mobile app and admin dashboard | ✅ |
+| 6 | Redis, Celery, notifications, offline sync | ✅ |
+| 7 | Analytics, security hardening, load testing | ⏳ |
 | 8 | CI/CD, documentation, demo data, MVP release | |
 
 ## Engineering approach

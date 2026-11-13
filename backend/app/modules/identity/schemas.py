@@ -57,6 +57,9 @@ class DeviceRegister(BaseModel):
     platform: DevicePlatform
     model: str | None = Field(default=None, max_length=100)
     app_version: str | None = Field(default=None, max_length=50)
+    push_token: str | None = Field(
+        default=None, max_length=300, description="Expo push token, if notifications are allowed"
+    )
 
 
 class DeviceOut(BaseModel):

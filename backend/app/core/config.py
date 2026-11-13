@@ -25,6 +25,14 @@ class Settings(BaseSettings):
     # Super-Admin connection (schooltrack_platform, BYPASSRLS). Platform endpoints answer
     # 503 when it is not configured.
     platform_database_url: PostgresDsn | None = None
+    # Background worker connection (schooltrack_worker): outbox and notifications only.
+    worker_database_url: PostgresDsn | None = None
+    # Redis: Celery broker and login rate limiting. Both are disabled when unset.
+    redis_url: str | None = None
+    push_provider: Literal["log", "expo"] = "log"
+    notification_max_attempts: int = Field(default=5, ge=1, le=20)
+    login_max_attempts: int = Field(default=10, ge=1)
+    login_window_s: int = Field(default=900, ge=60)
     db_pool_size: int = Field(default=10, ge=1, le=100)
     db_echo: bool = False
 
@@ -46,6 +54,8 @@ class Settings(BaseSettings):
     # for a school commute (40 m/s = 144 km/h) and is flagged for review.
     max_plausible_speed_m_s: float = Field(default=40.0, gt=0)
     movement_window_h: float = Field(default=12.0, gt=0, le=72)
+    # Events recorded without connectivity may be synchronized up to this long afterwards.
+    offline_max_age_h: float = Field(default=72.0, gt=0, le=24 * 14)
     geofence_min_area_m2: float = Field(default=100.0, gt=0)
     geofence_max_area_m2: float = Field(default=5_000_000.0, gt=0)  # 5 km²
 

@@ -7,12 +7,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from redis.asyncio import Redis
 
 from app import __version__
 from app.api.errors import register_error_handlers
 from app.api.v1.router import api_router
 from app.core.config import Settings, get_settings
 from app.infrastructure.database import Database
+from app.infrastructure.rate_limit import LoginRateLimiter
 
 REQUEST_ID_HEADER = "X-Request-ID"
 
@@ -25,10 +27,16 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         # The engine connects lazily; creating it here does not require the DB to be up.
         app.state.database = Database(settings)
+        redis = Redis.from_url(settings.redis_url) if settings.redis_url else None
+        app.state.login_limiter = LoginRateLimiter(
+            redis, max_attempts=settings.login_max_attempts, window_s=settings.login_window_s
+        )
         try:
             yield
         finally:
             await app.state.database.dispose()
+            if redis is not None:
+                await redis.aclose()
 
     app = FastAPI(
         title=settings.app_name,

@@ -2,7 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 
-import { AdminOnly, StatusBadge } from "@/components/Shell";
+import { AdminOnly, StatusBadge, useSession } from "@/components/Shell";
 import { api, useApi } from "@/lib/client";
 import { formatArea, parseLatLng, reasonLabel } from "@/lib/format";
 import type { Campus, Geofence, LocationVerdict } from "@/lib/types";
@@ -142,7 +142,51 @@ function LocationTester({ campus }: { campus: Campus }) {
   );
 }
 
+function GeofenceActions({ geofence, onChanged }: { geofence: Geofence; onChanged: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const toggle = () =>
+    run(() =>
+      api(`geofences/${geofence.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_active: !geofence.is_active }),
+      }),
+    );
+
+  const remove = () => {
+    if (!window.confirm(`Delete geofence "${geofence.name}"? This cannot be undone.`)) return;
+    void run(() => api(`geofences/${geofence.id}`, { method: "DELETE" }));
+  };
+
+  return (
+    <span style={{ display: "inline-flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      <button className="secondary" disabled={busy} onClick={() => void toggle()}>
+        {geofence.is_active ? "Deactivate" : "Activate"}
+      </button>
+      <button className="danger" disabled={busy} onClick={remove}>
+        Delete
+      </button>
+      {error && <span className="error">{error}</span>}
+    </span>
+  );
+}
+
 function CampusCard({ campus }: { campus: Campus }) {
+  const { isAdmin } = useSession();
   const geofences = useApi<Geofence[]>(`geofences?campus_id=${campus.id}`);
   return (
     <div className="panel">
@@ -151,21 +195,37 @@ function CampusCard({ campus }: { campus: Campus }) {
       {geofences.error && <div className="error">{geofences.error}</div>}
       <table>
         <thead>
-          <tr><th>Geofence</th><th>Area</th><th>Status</th></tr>
+          <tr><th>Geofence</th><th>Area</th><th>Status</th>{isAdmin && <th />}</tr>
         </thead>
         <tbody>
           {geofences.data?.map((g) => (
             <tr key={g.id}>
               <td>{g.name}</td>
               <td>{formatArea(g.area_m2)}</td>
-              <td>{g.is_active ? "active" : "inactive"}</td>
+              <td>
+                <span className={`badge ${g.is_active ? "ok" : "neutral"}`}>{g.is_active ? "active" : "inactive"}</span>
+              </td>
+              {isAdmin && (
+                <td>
+                  <GeofenceActions geofence={g} onChanged={geofences.reload} />
+                </td>
+              )}
             </tr>
           ))}
           {geofences.data?.length === 0 && (
-            <tr><td colSpan={3} className="muted">No geofence yet: attendance on this campus will be rejected.</td></tr>
+            <tr><td colSpan={4} className="muted">No geofence yet: attendance on this campus will be rejected.</td></tr>
           )}
         </tbody>
       </table>
+      {geofences.data && geofences.data.length > 0 && geofences.data.every((g) => !g.is_active) && (
+        <div className="error" style={{ marginTop: 10 }}>
+          Every geofence of this campus is inactive: attendance here will be rejected.
+        </div>
+      )}
+      <p className="muted">
+        A geofence that already validated attendance cannot be deleted (it is evidence for those events);
+        deactivate it instead.
+      </p>
       <AdminOnly>
         <h3 style={{ marginTop: 18 }}>Add a geofence</h3>
         <GeofenceForm campus={campus} onCreated={geofences.reload} />

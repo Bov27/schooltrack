@@ -28,11 +28,19 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U schooltrack -d schooltrack"
           --health-interval 5s --health-timeout 3s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
 
     env:
       MIGRATIONS_DATABASE_URL: postgresql+psycopg://schooltrack:ci_owner@localhost:5432/schooltrack
       DATABASE_URL: postgresql+psycopg://schooltrack_app:ci_app@localhost:5432/schooltrack
       PLATFORM_DATABASE_URL: postgresql+psycopg://schooltrack_platform:ci_platform@localhost:5432/schooltrack
+      WORKER_DATABASE_URL: postgresql+psycopg://schooltrack_worker:ci_worker@localhost:5432/schooltrack
+      REDIS_URL: redis://localhost:6379/0
       JWT_SECRET: ci-only-secret-not-used-anywhere-else-0123456789
 
     steps:
@@ -64,6 +72,7 @@ jobs:
           POSTGRES_DB: schooltrack
           SCHOOLTRACK_APP_DB_PASSWORD: ci_app
           SCHOOLTRACK_PLATFORM_DB_PASSWORD: ci_platform
+          SCHOOLTRACK_WORKER_DB_PASSWORD: ci_worker
         run: bash infrastructure/docker/postgres/initdb/20-create-app-role.sh
 
       - name: Migrations (upgrade, downgrade, upgrade)

@@ -11,6 +11,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-schooltrack_owner_dev}
       SCHOOLTRACK_APP_DB_PASSWORD: ${SCHOOLTRACK_APP_DB_PASSWORD:-schooltrack_app_dev}
       SCHOOLTRACK_PLATFORM_DB_PASSWORD: ${SCHOOLTRACK_PLATFORM_DB_PASSWORD:-schooltrack_platform_dev}
+      SCHOOLTRACK_WORKER_DB_PASSWORD: ${SCHOOLTRACK_WORKER_DB_PASSWORD:-schooltrack_worker_dev}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -19,6 +20,15 @@ services:
       - ./infrastructure/docker/postgres/initdb/20-create-app-role.sh:/docker-entrypoint-initdb.d/20-create-app-role.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -46,16 +56,43 @@ services:
       # Used by `docker compose exec api python -m app.cli ...`
       MIGRATIONS_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-schooltrack}:${POSTGRES_PASSWORD:-schooltrack_owner_dev}@db:5432/${POSTGRES_DB:-schooltrack}
       CORS_ORIGINS: '["http://localhost:3000"]'
+      REDIS_URL: redis://redis:6379/0
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/ready')"]
       interval: 10s
       timeout: 3s
       retries: 10
+
+  worker:
+    build: ./backend
+    command: ["celery", "-A", "app.workers.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+    environment: &worker-env
+      DATABASE_URL: postgresql+psycopg://schooltrack_app:${SCHOOLTRACK_APP_DB_PASSWORD:-schooltrack_app_dev}@db:5432/${POSTGRES_DB:-schooltrack}
+      WORKER_DATABASE_URL: postgresql+psycopg://schooltrack_worker:${SCHOOLTRACK_WORKER_DB_PASSWORD:-schooltrack_worker_dev}@db:5432/${POSTGRES_DB:-schooltrack}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-local-dev-secret-change-me-0123456789abcdef}
+      # "log" prints notifications instead of sending them; "expo" uses the Expo push service.
+      PUSH_PROVIDER: ${PUSH_PROVIDER:-log}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+
+  beat:
+    build: ./backend
+    command: ["celery", "-A", "app.workers.celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]
+    environment: *worker-env
+    depends_on:
+      redis:
+        condition: service_healthy
 
   web:
     build: ./apps/web
